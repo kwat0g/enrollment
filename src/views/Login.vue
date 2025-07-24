@@ -50,6 +50,7 @@ async function handleLogin() {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Login failed')
+    console.log("Login successful")
     userStore.setUser(data.user, data.token)
     router.push('/student/enrollment')
   } catch (err) {
