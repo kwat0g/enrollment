@@ -78,6 +78,11 @@ const assignSubjectsToSection = async (req, res) => {
         const type = scheduleRow ? scheduleRow.type : subject.type || '';
 
         // Insert schedule for this section/subject
+        // Check for room conflicts using helper
+        const conflictMsg = await checkRoomScheduleConflict(room_id, day, start_time, end_time);
+        if (conflictMsg) {
+          return res.status(400).json({ error: conflictMsg });
+        }
         await db.query(
           'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [sectionId, subject.id, room_id, day, start_time, end_time, type]
@@ -183,6 +188,26 @@ const bulkAssignSchedules = async (req, res) => {
   }
 };
 
+// Helper: Check for room schedule conflict
+async function checkRoomScheduleConflict(roomId, day, start_time, end_time) {
+  // Helper: convert HH:mm to minutes
+  const toMinutes = t => {
+    if (!t) return 0;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const s1 = toMinutes(start_time), e1 = toMinutes(end_time);
+  const [existingSchedules] = await db.query('SELECT * FROM schedules WHERE room_id = ? AND day = ?', [roomId, day]);
+  for (const existing of existingSchedules) {
+    const s2 = toMinutes(existing.start_time), e2 = toMinutes(existing.end_time);
+    if (s1 < e2 && s2 < e1) {
+      // Return error string if conflict
+      return `Room conflict: this room is already booked on ${day} from ${existing.start_time} to ${existing.end_time}.`;
+    }
+  }
+  return null;
+}
+
 // --- Admin: Assign subjects to a section with schedules (atomic) ---
 const assignWithSchedules = async (req, res) => {
   const sectionId = req.params.sectionId;
@@ -211,22 +236,10 @@ const assignWithSchedules = async (req, res) => {
           roomId = insertResult.insertId;
         }
       }
-      // Check for room conflicts
-      const [existingSchedules] = await db.query('SELECT * FROM schedules WHERE room_id = ? AND day = ?', [roomId, day]);
-      // Helper: convert HH:mm to minutes
-      const toMinutes = t => {
-        if (!t) return 0;
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-      };
-      const s1 = toMinutes(start_time), e1 = toMinutes(end_time);
-      for (const existing of existingSchedules) {
-        const s2 = toMinutes(existing.start_time), e2 = toMinutes(existing.end_time);
-        if (s1 < e2 && s2 < e1) {
-          return res.status(400).json({
-            error: `Room conflict: ${room} is already booked on ${day} from ${existing.start_time} to ${existing.end_time}.`
-          });
-        }
+      // Check for room conflicts using helper
+      const conflictMsg = await checkRoomScheduleConflict(roomId, day, start_time, end_time);
+      if (conflictMsg) {
+        return res.status(400).json({ error: conflictMsg });
       }
       await db.query(
         'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -311,6 +324,11 @@ const updateSubjectSchedule = async (req, res) => {
         roomId = insertResult.insertId;
       }
     }
+    // Check for room conflicts using helper
+    const conflictMsg = await checkRoomScheduleConflict(roomId, day, start_time, end_time);
+    if (conflictMsg) {
+      return res.status(400).json({ error: conflictMsg });
+    }
     // Check if schedule exists for this subject
     const [existingSchedules] = await db.query('SELECT * FROM schedules WHERE subject_id = ? LIMIT 1', [subjectId]);
     if (existingSchedules.length > 0) {
@@ -333,7 +351,7 @@ const updateSubjectSchedule = async (req, res) => {
   }
 };
 
-// --- Admin: Get all schedules for a subject (for SubjectManagement.vue, advanced) ---
+// ... (rest of the code remains the same)
 const getSubjectSchedules = async (req, res) => {
   try {
     // Get all schedules for this subject

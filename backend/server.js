@@ -109,7 +109,7 @@ app.get('/api/admin/rooms', roomController.getAllRooms);
 app.post('/api/admin/rooms', authAdmin, roomController.createRoom);
 app.put('/api/admin/rooms/:id', authAdmin, roomController.updateRoom);
 app.delete('/api/admin/rooms/:id', authAdmin, roomController.deleteRoom);
-app.get('/api/admin/rooms/:roomName/schedules', roomController.getRoomSchedules);
+app.get('/api/admin/rooms/:id/schedules', roomController.getRoomSchedules);
 
 // === UTILITY ROUTES ===
 app.get('/api/test', (req, res) => {
