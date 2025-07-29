@@ -57,13 +57,13 @@ app.get('/api/admin/sections/:id/status', sectionController.getSectionStatus);
 app.post('/api/admin/sections/:id/status', sectionController.updateSectionStatus);
 app.get('/api/admin/sections/:sectionId/schedules', sectionController.getSectionSchedules);
 
-// === SUBJECT MANAGEMENT ROUTES ===
 // --- COURSE MANAGEMENT ROUTES ---
 app.get('/api/admin/courses', authAdmin, adminCourseController.getAllCourses);
 app.post('/api/admin/courses', authAdmin, adminCourseController.createCourse);
 app.put('/api/admin/courses/:id', authAdmin, adminCourseController.updateCourse);
 app.delete('/api/admin/courses/:id', authAdmin, adminCourseController.deleteCourse);
 
+// === SUBJECT MANAGEMENT ROUTES ===
 app.get('/api/admin/subjects', subjectController.getSubjects);
 app.post('/api/admin/subjects', subjectController.createSubject);
 app.put('/api/admin/subjects/:id', subjectController.updateSubject);

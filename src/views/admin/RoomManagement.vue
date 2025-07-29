@@ -178,12 +178,21 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="time in timeSlots" :key="time">
+                  <tr v-for="(time, timeIndex) in timeSlots" :key="time">
                     <td class="py-1 px-2 text-center font-semibold">{{ time }}</td>
-                    <td v-for="day in days" :key="day" class="py-1 px-2 text-center">
-                      <div v-if="isSlotBooked(day, time)" class="bg-red-200 text-red-800 rounded px-1 py-0.5 font-semibold">Booked</div>
-                      <div v-else class="bg-green-100 text-green-700 rounded px-1 py-0.5">Available</div>
-                    </td>
+                    <template v-for="day in days" :key="`${day}-${time}`">
+                      <td 
+                        v-if="shouldShowSection(day, timeIndex)"
+                        class="py-1 px-2 text-center w-32"
+                        :rowspan="isSlotBooked(day, time) ? getRowSpan(day, timeIndex) : 1"
+                        :class="{ 'bg-red-100': isSlotBooked(day, time), 'bg-green-50': !isSlotBooked(day, time) }"
+                      >
+                        <div v-if="isSlotBooked(day, time)" class="font-semibold text-xs text-red-900">
+                          {{ getSectionName(day, time) }}
+                        </div>
+                        <div v-else class="text-green-700">Available</div>
+                      </td>
+                    </template>
                   </tr>
                 </tbody>
               </table>
@@ -230,53 +239,115 @@ const days = [
 ]
 const timeSlots = [
   '7:00AM', '8:00AM', '9:00AM', '10:00AM', '11:00AM',
-  '12:00PM', '1:00PM', '2:00PM', '3:00PM', '4:00PM', '5:00PM', '6:00PM', '7:00PM'
+  '12:00PM', '1:00PM', '2:00PM', '3:00PM', '4:00PM', 
+  '5:00PM', '6:00PM', '7:00PM', '8:00PM', '9:00PM', '10:00PM'
 ]
+
+// Convert time string to minutes since midnight
+function toMinutes(t) {
+  if (!t) return NaN;
+  
+  // 12-hour format (e.g. 1:00PM)
+  const ampmMatch = t.match(/^(\d{1,2}):(\d{2})(AM|PM)$/i);
+  if (ampmMatch) {
+    let [ , h, m, ap ] = ampmMatch;
+    let hour = parseInt(h, 10);
+    if (ap.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+    if (ap.toUpperCase() === 'AM' && hour === 12) hour = 0;
+    return hour * 60 + parseInt(m, 10);
+  }
+  
+  // 24-hour format with seconds (e.g. 13:00:00)
+  const time24Match = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (time24Match) {
+    const [ , h, m ] = time24Match;
+    return parseInt(h, 10) * 60 + parseInt(m, 10);
+  }
+  // 24-hour format (e.g. 13:00)
+  const h24Match = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24Match) {
+    let [ , h, m ] = h24Match;
+    return parseInt(h, 10) * 60 + parseInt(m, 10);
+  }
+  return NaN;
+}
 
 function isSlotBooked(day, time) {
   // Find if any schedule matches the day and overlaps with the time slot
   const schedules = calendarSchedules.value || [];
-  // Robustly convert 12h (1:00PM) or 24h (13:00:00) time to minutes
-  function toMinutes(t) {
-    if (!t) return NaN;
-    
-    // 12-hour format (e.g. 1:00PM)
-    const ampmMatch = t.match(/^(\d{1,2}):(\d{2})(AM|PM)$/i);
-    if (ampnMatch) {
-      let [ , h, m, ap ] = ampmMatch;
-      let hour = parseInt(h, 10);
-      if (ap.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-      if (ap.toUpperCase() === 'AM' && hour === 12) hour = 0;
-      return hour * 60 + parseInt(m, 10);
-    }
-    
-    // 24-hour format with seconds (e.g. 13:00:00)
-    const time24Match = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-    if (time24Match) {
-      const [ , h, m ] = time24Match;
-      return parseInt(h, 10) * 60 + parseInt(m, 10);
-    }
-    // 24-hour format (e.g. 13:00)
-    const h24Match = t.match(/^(\d{1,2}):(\d{2})$/);
-    if (h24Match) {
-      let [ , h, m ] = h24Match;
-      return parseInt(h, 10) * 60 + parseInt(m, 10);
-    }
-    return NaN;
-  }
   const slotStart = toMinutes(time);
   const slotEnd = slotStart + 60;
+  
   return schedules.some(sch => {
     if (!sch.day || !sch.start_time || !sch.end_time) return false;
     if (sch.day !== day) return false;
     const schStart = toMinutes(sch.start_time);
     const schEnd = toMinutes(sch.end_time);
-    if (day === 'Monday') {
-      console.log('[DEBUG] Slot:', time, 'slotStart:', slotStart, 'slotEnd:', slotEnd, 'Sched:', sch.start_time, sch.end_time, 'schStart:', schStart, 'schEnd:', schEnd);
-    }
     // Overlap if slotStart < schEnd and slotEnd > schStart
     return slotStart < schEnd && slotEnd > schStart;
   });
+}
+
+function getSectionName(day, time) {
+  const schedule = getScheduleForSlot(day, time);
+  return schedule ? schedule.section_name || 'Occupied' : 'Available';
+}
+
+function getScheduleForSlot(day, time) {
+  const schedules = calendarSchedules.value || [];
+  const slotStart = toMinutes(time);
+  const slotEnd = slotStart + 60;
+  
+  return schedules.find(sch => {
+    if (!sch.day || !sch.start_time || !sch.end_time) return false;
+    if (sch.day !== day) return false;
+    const schStart = toMinutes(sch.start_time);
+    const schEnd = toMinutes(sch.end_time);
+    return slotStart < schEnd && slotEnd > schStart;
+  });
+}
+
+function getRowSpan(day, timeIndex) {
+  const time = timeSlots[timeIndex];
+  const schedule = getScheduleForSlot(day, time);
+  
+  if (!schedule || !schedule.end_time) return 1;
+  
+  const startTime = toMinutes(time);
+  const endTime = toMinutes(schedule.end_time);
+  const duration = endTime - startTime;
+  
+  // Calculate how many time slots this section spans
+  const slots = Math.ceil(duration / 60);
+  return Math.max(1, slots);
+}
+
+function shouldShowSection(day, timeIndex) {
+  const time = timeSlots[timeIndex];
+  const schedule = getScheduleForSlot(day, time);
+  
+  // If no schedule or first time this section appears in the column
+  if (!schedule) return true;
+  
+  // Check if this is the first time slot for this section
+  if (timeIndex === 0) return true;
+  
+  const prevTime = timeSlots[timeIndex - 1];
+  const prevSchedule = getScheduleForSlot(day, prevTime);
+  
+  // Show if previous time slot has a different section or is available
+  return !prevSchedule || prevSchedule.section_name !== schedule.section_name;
+}
+
+function isPartOfSection(day, timeIndex) {
+  if (timeIndex === 0) return false;
+  
+  const time = timeSlots[timeIndex];
+  const schedule = getScheduleForSlot(day, time);
+  const prevTime = timeSlots[timeIndex - 1];
+  const prevSchedule = getScheduleForSlot(day, prevTime);
+  
+  return schedule && prevSchedule && schedule.section_name === prevSchedule.section_name;
 }
 
 async function fetchCalendarSchedules() {
@@ -286,32 +357,20 @@ async function fetchCalendarSchedules() {
   try {
     const token = sessionStorage.getItem('admin_token')
     const url = `http://localhost:5000/api/admin/rooms/${calendarRoomId.value}/schedules`
-    console.log('[DEBUG] Fetching schedules from:', url)
     
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     
     const data = await res.json()
-    console.log('[DEBUG] Raw API response:', { status: res.status, data })
     
     if (!res.ok) {
       throw new Error(data.error || `HTTP ${res.status}: Failed to fetch schedules`)
     }
     
     calendarSchedules.value = data || []
-    console.log('[DEBUG] Set calendarSchedules:', calendarSchedules.value)
     
-    // Log the first few schedules for debugging
-    if (calendarSchedules.value.length > 0) {
-      console.log('[DEBUG] First schedule item:', { 
-        day: calendarSchedules.value[0].day, 
-        start: calendarSchedules.value[0].start_time,
-        end: calendarSchedules.value[0].end_time
-      })
-    }
   } catch (err) {
-    console.error('[ERROR] fetchCalendarSchedules failed:', err)
     showNotification(`Error loading room schedules: ${err.message}`)
     calendarSchedules.value = []
   } finally {

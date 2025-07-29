@@ -32,7 +32,3 @@ function logout() {
   }
 }
 </script>
-
-<style>
-/* Custom font or global styles can go here */
-</style>
