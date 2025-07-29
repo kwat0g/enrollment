@@ -33,7 +33,62 @@ const getRoomSchedules = async (req, res) => {
   }
 };
 
+// --- Admin: Create room ---
+const createRoom = async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Room name is required.' });
+  try {
+    // Check uniqueness
+    const [rows] = await db.query('SELECT id FROM rooms WHERE name = ?', [name.trim()]);
+    if (rows.length) return res.status(400).json({ error: 'Room name already exists.' });
+    await db.query('INSERT INTO rooms (name) VALUES (?)', [name.trim()]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
+// --- Admin: Update room ---
+const updateRoom = async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Room name is required.' });
+  try {
+    // Check uniqueness (excluding current room)
+    const [rows] = await db.query('SELECT id FROM rooms WHERE name = ? AND id != ?', [name.trim(), req.params.id]);
+    if (rows.length) return res.status(400).json({ error: 'Room name already exists.' });
+    await db.query('UPDATE rooms SET name = ? WHERE id = ?', [name.trim(), req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
+// --- Admin: Delete room ---
+const deleteRoom = async (req, res) => {
+  try {
+    // Check if any schedules exist for this room
+    const [schedules] = await db.query('SELECT id FROM schedules WHERE room_id = ?', [req.params.id]);
+    if (schedules.length > 0) {
+      return res.status(400).json({ error: 'This room cannot be deleted because it is currently assigned to one or more sections or schedules.' });
+    }
+    await db.query('DELETE FROM rooms WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    // Handle MySQL foreign key constraint error
+    if (
+      (err && (err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451)) ||
+      /foreign key constraint/i.test(err.message)
+    ) {
+      return res.status(400).json({ error: 'This room cannot be deleted because it is currently assigned to one or more sections or schedules.' });
+    }
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
 module.exports = {
   getAllRooms,
-  getRoomSchedules
+  getRoomSchedules,
+  createRoom,
+  updateRoom,
+  deleteRoom
 };

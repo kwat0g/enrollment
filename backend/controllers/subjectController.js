@@ -45,7 +45,7 @@ const createSubject = async (req, res) => {
   const trimmedInstructor = instructor ? instructor.toString().trim() : '';
   try {
     // Check for duplicate code with same type
-    const [existing] = await db.query('SELECT * FROM subjects WHERE code = ? AND type = ?', [code.toString().trim(), type.toString().trim()]);
+    const [existing] = await db.query('SELECT * FROM subjects WHERE code = ? AND type = ? AND course_id = ? AND year_level = ?', [code.toString().trim(), type.toString().trim(), course_id, year_level]);
     if (existing.length > 0) {
       return res.status(400).json({ error: `Subject code '${code}' already exists with type '${type}'. Please use a different code or type.` });
     }

@@ -65,6 +65,7 @@ import {
   DocumentTextIcon,
   DocumentChartBarIcon,
   BookOpenIcon,
+  BuildingOfficeIcon,
 } from '@heroicons/vue/24/outline'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
@@ -89,6 +90,7 @@ const links = [
   { name: 'Course Management', icon: BookOpenIcon, to: '/admin/courses' },
   { name: 'Section Management', icon: ClipboardDocumentListIcon, to: '/admin/sections' },
   { name: 'Subject Management', icon: BookOpenIcon, to: '/admin/subjects' },
+  { name: 'Room Management', icon: BuildingOfficeIcon, to: '/admin/rooms' },
   { name: 'Enrollment Management', icon: CheckCircleIcon, to: '/admin/enrollments' },
   { name: 'Accountabilities Management', icon: DocumentTextIcon, to: '/admin/accountabilities' },
   { name: 'Reports', icon: DocumentChartBarIcon, to: '/admin/reports' },
