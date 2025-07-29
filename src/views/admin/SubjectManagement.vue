@@ -18,7 +18,7 @@ const notifMessage = ref('')
 const confirmMessage = ref('')
 const confirmCallback = ref(null)
 // Add course and year level to newSubject
-const newSubject = ref({ code: '', name: '', units: '', type: '', course_id: '', year_level: '' })
+const newSubject = ref({ code: '', name: '', instructor_name: '', units: '', type: '', course_id: '', year_level: '' })
 const isEditMode = ref(false)
 const editingSubjectId = ref(null)
 const validationError = ref('')
@@ -36,8 +36,7 @@ async function fetchCourses() {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch courses')
     courses.value = data
   } catch (err) {
-    notifMessage.value = err.message
-    showNotifModal.value = true
+    validationError.value = err.message
   }
 }
 
@@ -53,8 +52,7 @@ async function fetchSubjects() {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch subjects')
     subjects.value = data
   } catch (err) {
-    notifMessage.value = err.message
-    showNotifModal.value = true
+    validationError.value = err.message
   } finally {
     loading.value = false
   }
@@ -64,7 +62,7 @@ function openAddModal() {
   isEditMode.value = false
   editingSubjectId.value = null
   validationError.value = ''
-  newSubject.value = { code: '', name: '', units: '', type: '', course_id: selectedCourse.value, year_level: selectedYear.value }
+  newSubject.value = { code: '', name: '', instructor_name: '', units: '', type: '', course_id: selectedCourse.value, year_level: selectedYear.value }
   showAddModal.value = true
 }
 
@@ -130,37 +128,32 @@ async function openEditModal(subject) {
     newSubject.value = {
       code: subjectData.code,
       name: subjectData.name,
+      instructor_name: subjectData.instructor || '',
       units: subjectData.units,
       course_id: subjectData.course_id,
       year_level: subjectData.year_level,
       day: scheduleData ? scheduleData.day : '',
       start_time: scheduleData ? scheduleData.start_time : '',
       end_time: scheduleData ? scheduleData.end_time : '',
-      type: scheduleData ? scheduleData.type : '',
-      room: scheduleData ? scheduleData.room : '',
-      instructor: subjectData.instructor || '' // Assuming instructor is part of subjectData
+      type: subjectData.type || '',
+      room: scheduleData ? scheduleData.room : ''
     };
+
     
     // Store original data for comparison
     originalSubjectData.value = {
       code: subjectData.code,
       name: subjectData.name,
+      instructor_name: subjectData.instructor || '',
       units: subjectData.units,
+      course_id: subjectData.course_id,
+      year_level: subjectData.year_level,
       day: scheduleData ? scheduleData.day : '',
       start_time: scheduleData ? scheduleData.start_time : '',
       end_time: scheduleData ? scheduleData.end_time : '',
-      type: scheduleData ? scheduleData.type : '',
-      room: scheduleData ? scheduleData.room : '',
-      instructor: subjectData.instructor || ''
-    };
-    
-    console.log('Form populated with:', newSubject.value);
-    console.log('Field types after population:');
-    console.log('- code:', typeof newSubject.value.code, 'value:', newSubject.value.code);
-    console.log('- name:', typeof newSubject.value.name, 'value:', newSubject.value.name);
-    console.log('- units:', typeof newSubject.value.units, 'value:', newSubject.value.units);
-    console.log('- type:', typeof newSubject.value.type, 'value:', newSubject.value.type);
-    console.log('=== END OPEN EDIT MODAL DEBUG ===');
+      type: subjectData.type || '',
+      room: scheduleData ? scheduleData.room : ''
+    };  
     
     isEditMode.value = true
     editingSubjectId.value = subjectData.id
@@ -182,38 +175,24 @@ async function saveSubject() {
     validationError.value = 'No changes have been made. Please modify at least one field before updating.'
     return;
   }
-  
-  console.log('=== FRONTEND SAVE DEBUG ===');
-  console.log('isEditMode:', isEditMode.value);
-  console.log('editingSubjectId:', editingSubjectId.value);
-  console.log('Full form data:', newSubject.value);
-  console.log('Individual fields:');
-  console.log('- code:', newSubject.value.code, 'type:', typeof newSubject.value.code);
-  console.log('- name:', newSubject.value.name, 'type:', typeof newSubject.value.name);
-  console.log('- units:', newSubject.value.units, 'type:', typeof newSubject.value.units);
-  console.log('- type:', newSubject.value.type, 'type:', typeof newSubject.value.type);
-  console.log('- day:', newSubject.value.day, 'type:', typeof newSubject.value.day);
-  console.log('- room:', newSubject.value.room, 'type:', typeof newSubject.value.room);
-  console.log('- start_time:', newSubject.value.start_time, 'type:', typeof newSubject.value.start_time);
-  console.log('- end_time:', newSubject.value.end_time, 'type:', typeof newSubject.value.end_time);
-  console.log('- instructor:', newSubject.value.instructor, 'type:', typeof newSubject.value.instructor);
+
+  // Instructor Name validation (required)
+  if (!newSubject.value.instructor_name || !newSubject.value.instructor_name.toString().trim()) {
+    validationError.value = 'Instructor name is required.';
+    return;
+  }
   
   try {
     const token = sessionStorage.getItem('admin_token')
     
     if (isEditMode.value) {
-      console.log('=== FRONTEND EDIT DEBUG ===');
-      console.log('Editing subject ID:', editingSubjectId.value);
-      console.log('Form data:', newSubject.value);
       
       const subjectData = {
         code: newSubject.value.code,
         name: newSubject.value.name,
         units: newSubject.value.units,
-        instructor: newSubject.value.instructor
+        instructor: newSubject.value.instructor_name
       };
-      console.log('Sending subject data:', subjectData);
-      console.log('JSON stringified:', JSON.stringify(subjectData));
       
       // Update existing subject
       const subjectRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}`, {
@@ -222,11 +201,7 @@ async function saveSubject() {
         body: JSON.stringify(subjectData)
       })
       
-      console.log('Response status:', subjectRes.status);
-      console.log('Response ok:', subjectRes.ok);
-      
       const subjectResponseData = await subjectRes.json()
-      console.log('Subject update response:', subjectResponseData);
       
       if (!subjectRes.ok) throw new Error(subjectResponseData.error || 'Failed to update subject')
       
@@ -238,7 +213,6 @@ async function saveSubject() {
         end_time: newSubject.value.end_time,
         room: newSubject.value.room
       };
-      console.log('Sending schedule data:', scheduleData);
       
       const scheduleRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}/schedule`, {
         method: 'PUT',
@@ -252,12 +226,19 @@ async function saveSubject() {
       
       console.log('=== END FRONTEND EDIT DEBUG ===');
       notifMessage.value = 'Subject updated successfully!'
+      showNotifModal.value = true;
     } else {
       // Add new subject
+      // Map instructor_name to instructor for backend
+      const subjectPayload = { ...newSubject.value, instructor: newSubject.value.instructor_name };
+      delete subjectPayload.instructor_name;
       const res = await fetch('http://localhost:5000/api/admin/subjects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(newSubject.value)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(subjectPayload)
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add subject')
@@ -273,8 +254,7 @@ async function saveSubject() {
       message: err.message,
       stack: err.stack
     });
-    notifMessage.value = err.message
-    showNotifModal.value = true
+    validationError.value = err.message
   }
 }
 
@@ -297,8 +277,7 @@ async function confirmDeleteSubject() {
     showNotifModal.value = true
     await fetchSubjects()
   } catch (err) {
-    notifMessage.value = err.message
-    showNotifModal.value = true
+    validationError.value = err.message
   } finally {
     showConfirmDeleteModal.value = false;
     subjectToDelete.value = null;
@@ -338,13 +317,15 @@ function hasChanges() {
   return (
     current.code !== original.code ||
     current.name !== original.name ||
+    current.instructor_name !== original.instructor_name ||
     current.units !== original.units ||
+    current.course_id !== original.course_id ||
+    current.year_level !== original.year_level ||
     current.type !== original.type ||
     current.day !== original.day ||
     current.start_time !== original.start_time ||
     current.end_time !== original.end_time ||
-    current.room !== original.room ||
-    current.instructor !== original.instructor // Added instructor check
+    current.room !== original.room
   );
 }
 
@@ -407,7 +388,7 @@ watch([selectedCourse, selectedYear], fetchSubjects)
           <h3 class="text-xl font-bold mb-6 text-blue-900">{{ isEditMode ? 'Edit Subject' : 'Add Subject' }}</h3>
           
           <!-- Validation Error Display -->
-          <div v-if="validationError" class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          <div v-if="validationError" class="mt-2 mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
             {{ validationError }}
           </div>
           
@@ -432,6 +413,10 @@ watch([selectedCourse, selectedYear], fetchSubjects)
                 <option value="Lab">Laboratory</option>
               </select>
             </div>
+            <div class="col-span-2">
+              <label class="block text-gray-700 mb-1 font-semibold">Instructor Name</label>
+              <input v-model="newSubject.instructor_name" placeholder="Instructor Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            </div>
           </div>
           <div class="flex gap-2 justify-end mt-4">
             <button @click="closeAddModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
@@ -442,16 +427,6 @@ watch([selectedCourse, selectedYear], fetchSubjects)
       </div>
     </div>
 
-    <!-- Notification Modal (reuse design from SectionManagement) -->
-    <div v-if="showNotifModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-none">
-      <div :class="['bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative', notifMessage.includes('Cannot delete subject') ? 'border-l-8 border-orange-400' : 'border-l-8 border-yellow-400']">
-        <svg v-if="notifMessage.includes('Cannot delete subject')" class="w-10 h-10 text-orange-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <svg v-else class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <div class="mb-4 text-gray-800 text-base font-semibold">{{ notifMessage }}</div>
-        <button @click="showNotifModal = false" class="px-5 py-2" :class="notifMessage.includes('Cannot delete subject') ? 'bg-orange-400 text-white' : 'bg-yellow-400 text-blue-900'">OK</button>
-        <button @click="showNotifModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
-      </div>
-    </div>
 
     <!-- Confirmation Modal -->
     <div v-if="showConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-none">
@@ -479,4 +454,16 @@ watch([selectedCourse, selectedYear], fetchSubjects)
       </div>
     </div>
   </div>
+    <!-- Notification Modal -->
+    <div v-if="showNotifModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">{{ notifMessage }}</div>
+        <button @click="showNotifModal = false" class="px-5 py-2 bg-yellow-400 text-blue-900 rounded font-bold shadow hover:bg-yellow-300 transition">OK</button>
+        <button @click="showNotifModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
 </template> 

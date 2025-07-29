@@ -85,10 +85,12 @@ function logout() {
 }
 
 const links = [
+  { name: 'Student Management', icon: DocumentTextIcon, to: '/admin/students' },
+  { name: 'Course Management', icon: BookOpenIcon, to: '/admin/courses' },
   { name: 'Section Management', icon: ClipboardDocumentListIcon, to: '/admin/sections' },
-  { name: 'Enrollment Approvals', icon: CheckCircleIcon, to: '/admin/enrollments' },
-  { name: 'Accountabilities', icon: DocumentTextIcon, to: '/admin/accountabilities' },
   { name: 'Subject Management', icon: BookOpenIcon, to: '/admin/subjects' },
+  { name: 'Enrollment Management', icon: CheckCircleIcon, to: '/admin/enrollments' },
+  { name: 'Accountabilities Management', icon: DocumentTextIcon, to: '/admin/accountabilities' },
   { name: 'Reports', icon: DocumentChartBarIcon, to: '/admin/reports' },
 ]
 

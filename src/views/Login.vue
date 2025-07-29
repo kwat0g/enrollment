@@ -35,7 +35,7 @@ onMounted(() => {
   if (userStore.user && userStore.user.role === 'student') {
     router.replace('/student/enrollment')
   } else if (userStore.user && userStore.user.role === 'admin') {
-    router.replace('/admin/sections')
+    router.replace('/admin/students')
   }
 })
 

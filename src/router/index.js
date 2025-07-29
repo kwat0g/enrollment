@@ -61,10 +61,20 @@ const routes = [
         component: () => import('@/views/admin/SubjectManagement.vue'),
       },
       {
+        path: 'courses',
+        name: 'AdminCourses',
+        component: () => import('@/views/admin/CourseManagement.vue'),
+      },
+      {
+        path: 'students',
+        name: 'AdminStudents',
+        component: () => import('@/views/admin/StudentManagement.vue'),
+      },
+      {
         path: 'reports',
         name: 'AdminReports',
         component: () => import('@/views/admin/Reports.vue'),
-      },
+      }
     ],
   },
   {

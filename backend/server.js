@@ -10,9 +10,11 @@ const { authStudent, authAdmin } = require('./middleware/auth');
 // Import controllers
 const authController = require('./controllers/authController');
 const studentController = require('./controllers/studentController');
+const adminStudentController = require('./controllers/adminStudentController');
 const enrollmentController = require('./controllers/enrollmentController');
 const sectionController = require('./controllers/sectionController');
 const subjectController = require('./controllers/subjectController');
+const adminCourseController = require('./controllers/adminCourseController');
 const scheduleController = require('./controllers/scheduleController');
 const accountabilityController = require('./controllers/accountabilityController');
 const gradeController = require('./controllers/gradeController');
@@ -56,7 +58,12 @@ app.post('/api/admin/sections/:id/status', sectionController.updateSectionStatus
 app.get('/api/admin/sections/:sectionId/schedules', sectionController.getSectionSchedules);
 
 // === SUBJECT MANAGEMENT ROUTES ===
-app.get('/api/admin/courses', subjectController.getCourses);
+// --- COURSE MANAGEMENT ROUTES ---
+app.get('/api/admin/courses', authAdmin, adminCourseController.getAllCourses);
+app.post('/api/admin/courses', authAdmin, adminCourseController.createCourse);
+app.put('/api/admin/courses/:id', authAdmin, adminCourseController.updateCourse);
+app.delete('/api/admin/courses/:id', authAdmin, adminCourseController.deleteCourse);
+
 app.get('/api/admin/subjects', subjectController.getSubjects);
 app.post('/api/admin/subjects', subjectController.createSubject);
 app.put('/api/admin/subjects/:id', subjectController.updateSubject);
@@ -76,11 +83,19 @@ app.get('/api/admin/subjects/:id/schedules', scheduleController.getSubjectSchedu
 app.get('/api/admin/subjects/:id/full-schedules', scheduleController.getSubjectFullSchedules);
 app.get('/api/admin/schedules/full', scheduleController.getAllSchedulesFull);
 
+// === STUDENT MANAGEMENT ROUTES ===
+app.get('/api/admin/students/next-id', adminStudentController.getNextStudentId);
+app.get('/api/admin/students', adminStudentController.getAllStudents);
+app.post('/api/admin/students', adminStudentController.createStudent);
+app.put('/api/admin/students/:student_id', adminStudentController.updateStudent);
+app.delete('/api/admin/students/:student_id', adminStudentController.deleteStudent);
+
 // === ACCOUNTABILITY MANAGEMENT ROUTES ===
 app.get('/api/admin/accountabilities', accountabilityController.getAllAccountabilities);
 app.post('/api/admin/accountabilities', accountabilityController.createAccountability);
 app.put('/api/admin/accountabilities/:id', accountabilityController.updateAccountability);
 app.delete('/api/admin/accountabilities/:id', accountabilityController.deleteAccountability);
+app.post('/api/admin/accountabilities/:id/clear', authAdmin, accountabilityController.clearAccountability);
 
 // === GRADE MANAGEMENT ROUTES ===
 app.get('/api/admin/grades', gradeController.getAllGrades);

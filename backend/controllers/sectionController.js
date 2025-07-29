@@ -4,7 +4,7 @@ const { getSectionEnrollmentStatus } = require('../utils/helpers');
 // --- Admin: Get all sections ---
 const getAllSections = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT s.*, c.name as course_name FROM sections s LEFT JOIN courses c ON s.course_id = c.id');
+    const [rows] = await db.query('SELECT s.*, s.schedule_type, c.name as course_name FROM sections s LEFT JOIN courses c ON s.course_id = c.id');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
@@ -14,9 +14,19 @@ const getAllSections = async (req, res) => {
 // --- Admin: Create section ---
 const createSection = async (req, res) => {
   const { name, year_level, course_id, schedule_type, status } = req.body;
-  if (!name || !year_level || !course_id || !status) return res.status(400).json({ error: 'Missing required fields.' });
+  const requiredFields = [
+    { key: 'name', label: 'Section name' },
+    { key: 'year_level', label: 'Year level' },
+    { key: 'course_id', label: 'Course' },
+    { key: 'status', label: 'Status' }
+  ];
+  for (const field of requiredFields) {
+    if (!req.body[field.key]) {
+      return res.status(400).json({ error: `${field.label} is required.` });
+    }
+  }
   try {
-    await db.query('INSERT INTO sections (name, year_level, course_id, status) VALUES (?, ?, ?, ?)', [name, year_level, course_id, status]);
+    await db.query('INSERT INTO sections (name, year_level, course_id, schedule_type, status) VALUES (?, ?, ?, ?, ?)', [name, year_level, course_id, schedule_type, status]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
@@ -25,7 +35,7 @@ const createSection = async (req, res) => {
 
 // --- Admin: Update section ---
 const updateSection = async (req, res) => {
-  const { name, year_level, course_id, status } = req.body;
+  const { name, year_level, course_id, schedule_type, status } = req.body;
   if (!name || !year_level || !course_id || !status) return res.status(400).json({ error: 'Missing required fields.' });
   try {
     // Fetch current section data
@@ -49,7 +59,7 @@ const updateSection = async (req, res) => {
       return res.status(400).json({ error: 'Cannot edit section: there are pending enrollments for this section in the current term.' });
     }
     
-    await db.query('UPDATE sections SET name=?, year_level=?, course_id=?, status=? WHERE id=?', [name, year_level, course_id, status, req.params.id]);
+    await db.query('UPDATE sections SET name=?, year_level=?, course_id=?, schedule_type=?, status=? WHERE id=?', [name, year_level, course_id, schedule_type, status, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });

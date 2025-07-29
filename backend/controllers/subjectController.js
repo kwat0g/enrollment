@@ -27,24 +27,30 @@ const getSubjects = async (req, res) => {
 
 // --- Admin: Add subject ---
 const createSubject = async (req, res) => {
-  const { code, name, units, type, course_id, year_level } = req.body;
-  const errors = [];
-  if (!code || !code.toString().trim()) errors.push('Subject code is required');
-  if (!name || !name.toString().trim()) errors.push('Subject name is required');
-  if (!units || isNaN(Number(units)) || Number(units) <= 0) errors.push('Valid units number is required');
-  if (!type || !type.toString().trim()) errors.push('Subject type is required');
-  if (!course_id) errors.push('Course is required');
-  if (!year_level) errors.push('Year level is required');
-  if (errors.length > 0) return res.status(400).json({ error: `Missing required fields: ${errors.join(', ')}` });
-  
+  const { code, name, units, type, course_id, year_level, instructor } = req.body;
+  const requiredFields = [
+    { key: 'code', label: 'Subject code' },
+    { key: 'name', label: 'Subject name' },
+    { key: 'units', label: 'Units' },
+    { key: 'type', label: 'Subject type' },
+    { key: 'course_id', label: 'Course' },
+    { key: 'year_level', label: 'Year level' }
+  ];
+  for (const field of requiredFields) {
+    if (!req.body[field.key] || (field.key === 'units' && (isNaN(Number(req.body.units)) || Number(req.body.units) <= 0))) {
+      return res.status(400).json({ error: `${field.label} is required.` });
+    }
+  }
+  // Instructor is not strictly required, but trim it if present
+  const trimmedInstructor = instructor ? instructor.toString().trim() : '';
   try {
     // Check for duplicate code with same type
     const [existing] = await db.query('SELECT * FROM subjects WHERE code = ? AND type = ?', [code.toString().trim(), type.toString().trim()]);
     if (existing.length > 0) {
       return res.status(400).json({ error: `Subject code '${code}' already exists with type '${type}'. Please use a different code or type.` });
     }
-    await db.query('INSERT INTO subjects (code, name, units, type, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?)', 
-      [code.toString().trim(), name.toString().trim(), Number(units), type.toString().trim(), course_id, year_level]);
+    await db.query('INSERT INTO subjects (code, name, units, type, course_id, year_level, instructor) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+      [code.toString().trim(), name.toString().trim(), Number(units), type.toString().trim(), course_id, year_level, trimmedInstructor]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });

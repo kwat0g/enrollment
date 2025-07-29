@@ -324,7 +324,7 @@ async function openEditModal(section) {
     return;
   }
   
-  editSection.value = { ...section }
+  editSection.value = { ...section, schedule_type: section.schedule_type || '' }
   await fetchEditSubjects(section.course_id, section.year_level)
   await fetchAssignedSubjects(section.id)
   // Check if editing is blocked (students enrolled or pending for current term)
@@ -341,7 +341,7 @@ async function openEditModal(section) {
   }
   
   // Store original state for change detection
-  originalEditSection.value = { ...section }
+  originalEditSection.value = { ...section, schedule_type: section.schedule_type || '' }
   originalEditSubjectIds.value = [...editSelectedSubjectIds.value]
   showEditModal.value = true
 }
@@ -456,7 +456,7 @@ async function saveSectionAndSubjects() {
     if (!res2.ok) throw new Error(data2.error || 'Failed to update subjects');
   }
   showEditModal.value = false;
-  showNotification('Section and subjects updated successfully!');
+  showNotification('Section updated successfully!');
   await fetchSections();
 }
 
@@ -782,7 +782,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="section in sections" :key="section.id" class="text-gray-900">
+          <tr v-for="section in sections.filter(s => s.id !== 0)" :key="section.id" class="text-gray-900">
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ section.name }}</td>
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ section.year_level }}</td>
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ section.course_name }}</td>
