@@ -52,7 +52,13 @@ async function handleLogin() {
     if (!res.ok) throw new Error(data.error || 'Login failed')
     console.log("Login successful")
     userStore.setUser(data.user, data.token)
-    router.push('/student/enrollment')
+    
+    // Redirect based on user role
+    if (data.user.role === 'admin') {
+      router.push('/admin/students')
+    } else {
+      router.push('/student/enrollment')
+    }
   } catch (err) {
     error.value = err.message
   } finally {

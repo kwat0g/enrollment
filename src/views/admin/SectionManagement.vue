@@ -196,35 +196,43 @@ async function showAssignSubjectsModal(sectionId, courseId, yearLevel) {
   showSubjectModal.value = true
 }
 
-// Assign selected subjects to section
+// Helper to get current schedules for assigned subjects
+async function getCurrentSchedulesForSection(sectionId, subjectIds) {
+  const token = sessionStorage.getItem('admin_token');
+  const schedules = [];
+  for (const subjectId of subjectIds) {
+    const res = await fetch(`http://localhost:5000/api/admin/sections/${sectionId}/subjects/${subjectId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const subject = await res.json();
+    schedules.push({
+      subject_id: subject.id,
+      code: subject.code,
+      name: subject.name,
+      type: subject.type,
+      day: subject.schedule?.day || '',
+      start_time: subject.schedule?.start_time || '',
+      end_time: subject.schedule?.end_time || '',
+      room: subject.room || ''
+    });
+  }
+  return schedules;
+}
+
+// assignSubjectsToSection: always prefill with all current schedules for all assigned subjects
 async function assignSubjectsToSection() {
   try {
-    await fetchRooms()
-    // Do NOT call the backend yet. Just show the schedule modal for the selected subjects.
-    showSubjectModal.value = false
-    // Fetch subject info for the assigned subjects to populate the schedule modal
-    const token = sessionStorage.getItem('admin_token')
-    const assignedSubjects = []
-    for (const subjectId of selectedSubjectIds.value) {
-      const res = await fetch(`http://localhost:5000/api/admin/subjects/${subjectId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const subject = await res.json()
-      assignedSubjects.push({
-        subject_id: subject.id,
-        code: subject.code,
-        name: subject.name,
-        type: subject.type,
-        day: '',
-        start_time: '',
-        end_time: '',
-        room: ''
-      })
-    }
-    pendingSchedules.value = assignedSubjects
-    showScheduleModal.value = true
+    await fetchRooms();
+    showSubjectModal.value = false;
+    const token = sessionStorage.getItem('admin_token');
+    // Get all assigned subject IDs (not just new ones)
+    const allAssignedIds = [...editSelectedSubjectIds.value];
+    // Get current schedules for all assigned subjects
+    const allSchedules = await getCurrentSchedulesForSection(editSection.value.id, allAssignedIds);
+    pendingSchedules.value = allSchedules;
+    showScheduleModal.value = true;
   } catch (err) {
-    showNotification(err.message || 'Failed to prepare schedule assignment.')
+    showNotification(err.message || 'Failed to prepare schedule assignment.');
   }
 }
 
@@ -646,6 +654,8 @@ async function saveAssignedSchedules() {
       showNotifModal.value = true
       return
     }
+    // Debug log: what is being sent to the backend
+    console.log('SENDING SCHEDULES:', JSON.stringify(pendingSchedules.value, null, 2));
     // Check for conflicts among pending schedules
     for (let i = 0; i < pendingSchedules.value.length; i++) {
       for (let j = i + 1; j < pendingSchedules.value.length; j++) {
@@ -764,6 +774,32 @@ onMounted(() => {
   fetchSections()
   fetchCourses()
 })
+
+const showSaveConfirmModal = ref(false)
+
+function trySaveEditSection() {
+  if (!showEditModal.value) return;
+  // Find newly assigned subjects
+  const oldIds = [...originalEditSubjectIds.value].map(String);
+  const newIds = [...editSelectedSubjectIds.value].map(String);
+  const newSubjectIds = newIds.filter(id => !oldIds.includes(id));
+  if (newSubjectIds.length > 0) {
+    // There are new subjects, go directly to schedule assignment
+    saveEditSectionWithUnassignWarning();
+  } else {
+    // No new subjects, show confirmation modal
+    showSaveConfirmModal.value = true;
+  }
+}
+
+function confirmSaveEditSectionModal() {
+  showSaveConfirmModal.value = false
+  saveEditSectionWithUnassignWarning()
+}
+
+function cancelSaveEditSectionModal() {
+  showSaveConfirmModal.value = false
+}
 
 </script>
 
@@ -937,7 +973,7 @@ onMounted(() => {
         </div>
         <div class="flex gap-2 justify-end mt-4">
           <button @click="closeEditModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
-          <button @click="saveEditSectionWithUnassignWarning"
+          <button @click="trySaveEditSection"
             :disabled="!editSection.name || !editSection.year_level || !editSection.course_id || !editSection.schedule_type || !hasEditChanges()"
             class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50">
             Save
@@ -948,14 +984,15 @@ onMounted(() => {
     </div>
 
     <!-- Unsaved Changes Modal -->
-    <div v-if="showUnsavedModal" class="fixed inset-0 flex items-center justify-center z-50 pointer-events-auto">
-      <div class="bg-white p-6 rounded shadow w-full max-w-sm text-center pointer-events-auto">
-        <div class="mb-4">You have unsaved changes. What would you like to do?</div>
-        <div class="flex gap-2 justify-center">
-          <button @click="discardEditChanges" class="px-4 py-2 bg-gray-300 rounded">Discard</button>
-          <button @click="saveFromUnsavedModal" class="px-4 py-2 bg-blue-900 text-white rounded">Save</button>
-          <button @click="() => { showUnsavedModal = false }" class="px-4 py-2 bg-yellow-400 text-blue-900 rounded">Cancel</button>
+    <div v-if="showUnsavedModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to cancel?</div>
+        <div class="flex gap-2">
+          <button @click="discardEditChanges" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Yes, Cancel</button>
+          <button @click="() => { showUnsavedModal = false }" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">No, Stay</button>
         </div>
+        <button @click="() => { showUnsavedModal = false }" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
 
@@ -1127,6 +1164,17 @@ onMounted(() => {
       <div class="flex gap-2 justify-center">
         <button @click="handleUnassignWarningCancel" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
         <button @click="handleUnassignWarningConfirm" class="px-4 py-2 bg-red-500 text-white rounded">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Edit Section Confirmation Modal -->
+  <div v-if="showSaveConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+      <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to save?</div>
+      <div class="flex gap-2 justify-center">
+        <button @click="cancelSaveEditSectionModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+        <button @click="confirmSaveEditSectionModal" class="px-4 py-2 bg-blue-900 text-white rounded">Yes, Save</button>
       </div>
     </div>
   </div>

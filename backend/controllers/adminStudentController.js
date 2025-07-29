@@ -49,14 +49,14 @@ const createStudent = async (req, res) => {
 // PUT /api/admin/students/:student_id
 const updateStudent = async (req, res) => {
   try {
-    const { first_name, last_name, course_id, year_level } = req.body;
+    const { first_name, last_name, middle_name, suffix, gender, address, contact_number, email, course_id, year_level } = req.body;
     const { student_id } = req.params;
-    if (!first_name || !last_name || !course_id || !year_level) {
+    if (!first_name || !last_name || !middle_name || !gender || !address || !contact_number || !email || !course_id || !year_level) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
     await db.query(
-      'UPDATE students SET first_name=?, last_name=?, course_id=?, year_level=? WHERE student_id=?',
-      [first_name, last_name, course_id, year_level, student_id]
+      'UPDATE students SET first_name=?, last_name=?, middle_name=?, suffix=?, gender=?, address=?, contact_number=?, email=?, course_id=?, year_level=? WHERE student_id=?',
+      [first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, year_level, student_id]
     );
     res.json({ success: true });
   } catch (err) {

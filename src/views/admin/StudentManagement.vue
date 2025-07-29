@@ -102,8 +102,8 @@
           </div>
         </div>
         <div class="flex gap-2 justify-end">
-          <button @click="closeAddModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-          <button @click="saveStudent" class="px-4 py-2 bg-blue-900 text-white rounded">{{ isEditMode ? 'Save Changes' : 'Add Student' }}</button>
+          <button @click="handleCancel" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+          <button @click="trySaveStudent" :disabled="isEditMode && !hasStudentChanges" class="px-4 py-2 bg-blue-900 text-white rounded" :class="(isEditMode && !hasStudentChanges) ? 'opacity-50 cursor-not-allowed' : ''">{{ isEditMode ? 'Save Changes' : 'Add Student' }}</button>
         </div>
         <button @click="closeAddModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
@@ -131,11 +131,37 @@
         <button @click="cancelDeleteStudent" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
+
+    <!-- Unsaved Changes Warning Modal -->
+    <div v-if="showUnsavedWarningModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-70 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to cancel?</div>
+        <div class="flex gap-2">
+          <button @click="confirmCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Yes, Cancel</button>
+          <button @click="showUnsavedWarningModal = false" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">No, Stay</button>
+        </div>
+        <button @click="showUnsavedWarningModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Save Confirmation Modal -->
+    <div v-if="showSaveConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <h3 class="text-xl font-bold mb-4 text-blue-900">Confirm Save</h3>
+        <p class="mb-4 text-gray-800 text-base">You have unsaved changes. Are you sure you want to save?</p>
+        <div class="flex gap-2">
+          <button @click="confirmSaveStudent" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">Yes, Save</button>
+          <button @click="cancelSaveStudent" class="px-4 py-2 bg-gray-300 rounded font-semibold shadow hover:bg-gray-400 transition">Cancel</button>
+        </div>
+        <button @click="showSaveConfirmModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const students = ref([])
 const courses = ref([])
@@ -147,6 +173,43 @@ const notifMessage = ref('')
 const showConfirmDeleteModal = ref(false)
 const validationError = ref('')
 const studentForm = ref({ student_id: '', first_name: '', last_name: '', middle_name: '', suffix: '', gender: '', address: '', contact_number: '', email: '', course_id: '', year_level: '' })
+const originalStudentData = ref(null)
+
+// Unsaved changes warning modal state
+const showUnsavedWarningModal = ref(false)
+
+// Computed property to check if student data has changed
+const hasStudentChanges = computed(() => {
+  if (!originalStudentData.value || !isEditMode.value) return false
+  
+  return (
+    studentForm.value.first_name !== originalStudentData.value.first_name ||
+    studentForm.value.last_name !== originalStudentData.value.last_name ||
+    studentForm.value.middle_name !== originalStudentData.value.middle_name ||
+    studentForm.value.suffix !== originalStudentData.value.suffix ||
+    studentForm.value.gender !== originalStudentData.value.gender ||
+    studentForm.value.address !== originalStudentData.value.address ||
+    studentForm.value.contact_number !== originalStudentData.value.contact_number ||
+    studentForm.value.email !== originalStudentData.value.email ||
+    studentForm.value.course_id !== originalStudentData.value.course_id ||
+    studentForm.value.year_level !== originalStudentData.value.year_level
+  )
+})
+
+// Function to handle cancel with unsaved changes check
+function handleCancel() {
+  if (isEditMode.value && hasStudentChanges.value) {
+    showUnsavedWarningModal.value = true
+  } else {
+    closeAddModal()
+  }
+}
+
+// Function to confirm cancel (when user clicks "Yes, Cancel")
+function confirmCancel() {
+  showUnsavedWarningModal.value = false
+  closeAddModal()
+}
 
 function clearValidationError() {
   validationError.value = ''
@@ -204,7 +267,10 @@ async function openAddModal() {
 
 function closeAddModal() {
   showAddModal.value = false
+  isEditMode.value = false
   validationError.value = ''
+  studentForm.value = { student_id: '', first_name: '', last_name: '', middle_name: '', suffix: '', gender: '', address: '', contact_number: '', email: '', course_id: '', year_level: '' }
+  originalStudentData.value = null
 }
 
 function saveStudent() {
@@ -247,6 +313,7 @@ function openEditModal(student) {
   isEditMode.value = true
   validationError.value = ''
   studentForm.value = { ...student }
+  originalStudentData.value = { ...student } // Store original data
   showAddModal.value = true
 }
 
@@ -282,6 +349,26 @@ function confirmDeleteStudentAction() {
       notifMessage.value = 'Failed to delete student.'
       showNotifModal.value = true
     })
+}
+
+const showSaveConfirmModal = ref(false)
+
+function trySaveStudent() {
+  // Only show confirmation in edit mode
+  if (isEditMode.value) {
+    showSaveConfirmModal.value = true
+  } else {
+    saveStudent()
+  }
+}
+
+function confirmSaveStudent() {
+  showSaveConfirmModal.value = false
+  saveStudent()
+}
+
+function cancelSaveStudent() {
+  showSaveConfirmModal.value = false
 }
 
 onMounted(() => {

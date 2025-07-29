@@ -208,18 +208,26 @@ async function checkRoomScheduleConflict(roomId, day, start_time, end_time) {
   return null;
 }
 
-// --- Admin: Assign subjects to a section with schedules (atomic) ---
+// --- Admin: Assign subjects to a section with schedules (robust, partial update) ---
 const assignWithSchedules = async (req, res) => {
   const sectionId = req.params.sectionId;
   const { subjectIds, schedules } = req.body;
   if (!Array.isArray(subjectIds) || subjectIds.length === 0 || !Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({ error: 'Subjects and schedules are required.' });
   }
-  
   try {
-    // Remove all existing schedules for this section
-    await db.query('DELETE FROM schedules WHERE section_id = ?', [sectionId]);
+    // Get all current schedules for this section
+    const [currentSchedules] = await db.query('SELECT subject_id FROM schedules WHERE section_id = ?', [sectionId]);
+    const currentSubjectIds = currentSchedules.map(s => s.subject_id.toString());
+    const newSubjectIds = subjectIds.map(String);
 
+    // Delete schedules for subjects that are no longer assigned
+    const toRemove = currentSubjectIds.filter(id => !newSubjectIds.includes(id));
+    for (const subjectId of toRemove) {
+      await db.query('DELETE FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subjectId]);
+    }
+
+    // For each schedule in the request, update if exists, else insert
     for (const sched of schedules) {
       const { subject_id, day, start_time, end_time, room, type } = sched;
       if (!subject_id || !day || !start_time || !end_time || !room || !type) {
@@ -236,15 +244,21 @@ const assignWithSchedules = async (req, res) => {
           roomId = insertResult.insertId;
         }
       }
-      // Check for room conflicts using helper
-      const conflictMsg = await checkRoomScheduleConflict(roomId, day, start_time, end_time);
-      if (conflictMsg) {
-        return res.status(400).json({ error: conflictMsg });
+      // Check if schedule exists
+      const [existing] = await db.query('SELECT id FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subject_id]);
+      if (existing.length) {
+        // Update existing schedule
+        await db.query(
+          'UPDATE schedules SET room_id=?, day=?, start_time=?, end_time=?, type=? WHERE section_id=? AND subject_id=?',
+          [roomId, day, start_time, end_time, type, sectionId, subject_id]
+        );
+      } else {
+        // Insert new schedule
+        await db.query(
+          'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [sectionId, subject_id, roomId, day, start_time, end_time, type]
+        );
       }
-      await db.query(
-        'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [sectionId, subject_id, roomId, day, start_time, end_time, type]
-      );
     }
     res.json({ success: true });
   } catch (err) {

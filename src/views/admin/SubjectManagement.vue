@@ -25,6 +25,7 @@ const validationError = ref('')
 const originalSubjectData = ref(null)
 const showConfirmDeleteModal = ref(false)
 const subjectToDelete = ref(null)
+const showSaveConfirmModal = ref(false)
 
 async function fetchCourses() {
   try {
@@ -329,6 +330,23 @@ function hasChanges() {
   );
 }
 
+function trySaveSubject() {
+  if (isEditMode.value) {
+    showSaveConfirmModal.value = true
+  } else {
+    saveSubject()
+  }
+}
+
+function confirmSaveSubject() {
+  showSaveConfirmModal.value = false
+  saveSubject()
+}
+
+function cancelSaveSubject() {
+  showSaveConfirmModal.value = false
+}
+
 onMounted(fetchCourses)
 
 watch([selectedCourse, selectedYear], fetchSubjects)
@@ -420,7 +438,7 @@ watch([selectedCourse, selectedYear], fetchSubjects)
           </div>
           <div class="flex gap-2 justify-end mt-4">
             <button @click="closeAddModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
-            <button @click="saveSubject" :disabled="isEditMode && !hasChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">{{ isEditMode ? 'Update' : 'Add' }}</button>
+            <button @click="trySaveSubject" :disabled="isEditMode && !hasChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">{{ isEditMode ? 'Update' : 'Add' }}</button>
           </div>
           <button @click="closeAddModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
         </div>
@@ -428,16 +446,29 @@ watch([selectedCourse, selectedYear], fetchSubjects)
     </div>
 
 
-    <!-- Confirmation Modal -->
-    <div v-if="showConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-none">
-      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-orange-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
-        <svg class="w-10 h-10 text-orange-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <!-- Confirmation Modal for Unsaved Changes -->
+    <div v-if="showConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <div class="mb-4 text-gray-800 text-base font-semibold">{{ confirmMessage }}</div>
         <div class="flex gap-2">
           <button @click="cancelConfirm" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Cancel</button>
-          <button @click="confirmAction" class="px-4 py-2 bg-orange-400 text-white rounded font-semibold shadow hover:bg-orange-500 transition">Yes, Discard</button>
+          <button @click="confirmAction" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">Yes, Discard</button>
         </div>
         <button @click="cancelConfirm" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal for Saving Changes -->
+    <div v-if="showSaveConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-blue-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-blue-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">Are you sure you want to save these changes?</div>
+        <div class="flex gap-2">
+          <button @click="cancelSaveSubject" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Cancel</button>
+          <button @click="confirmSaveSubject" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">Yes, Save</button>
+        </div>
+        <button @click="cancelSaveSubject" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
 

@@ -48,8 +48,8 @@
       </div>
     </div>
     <div class="flex gap-2 justify-end">
-      <button @click="closeModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-      <button @click="saveCourse" class="px-4 py-2 bg-blue-900 text-white rounded">Save</button>
+      <button @click="handleCancel" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+      <button @click="trySaveCourse" class="px-4 py-2 bg-blue-900 text-white rounded">Save</button>
     </div>
     <button @click="closeModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
   </div>
@@ -66,11 +66,37 @@
     <button @click="closeDeleteModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
   </div>
 </div>
+
+    <!-- Unsaved Changes Warning Modal -->
+    <div v-if="showUnsavedWarningModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to cancel?</div>
+        <div class="flex gap-2">
+          <button @click="confirmCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Yes, Cancel</button>
+          <button @click="showUnsavedWarningModal = false" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">No, Stay</button>
+        </div>
+        <button @click="showUnsavedWarningModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Save Confirmation Modal -->
+    <div v-if="showSaveConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-blue-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-blue-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to save?</div>
+        <div class="flex gap-2">
+          <button @click="confirmSaveCourse" class="px-4 py-2 bg-blue-200 text-blue-800 rounded font-semibold hover:bg-blue-300 transition">Yes, Save</button>
+          <button @click="cancelSaveCourse" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">No, Cancel</button>
+        </div>
+        <button @click="showSaveConfirmModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+  </div>
+</div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const courses = ref([])
 const showAddModal = ref(false)
@@ -78,8 +104,38 @@ const showEditModal = ref(false)
 const showDeleteModal = ref(false)
 const validationError = ref('')
 const courseForm = ref({ id: null, code: '', name: '' })
+const originalCourseData = ref(null)
 const courseToDelete = ref(null)
 const loading = ref(false)
+
+// Unsaved changes warning modal state
+const showUnsavedWarningModal = ref(false)
+const showSaveConfirmModal = ref(false)
+
+// Computed property to check if course data has changed
+const hasCourseChanges = computed(() => {
+  if (!originalCourseData.value || !showEditModal.value) return false
+  
+  return (
+    courseForm.value.code !== originalCourseData.value.code ||
+    courseForm.value.name !== originalCourseData.value.name
+  )
+})
+
+// Function to handle cancel with unsaved changes check
+function handleCancel() {
+  if (showEditModal.value && hasCourseChanges.value) {
+    showUnsavedWarningModal.value = true
+  } else {
+    closeModal()
+  }
+}
+
+// Function to confirm cancel (when user clicks "Yes, Cancel")
+function confirmCancel() {
+  showUnsavedWarningModal.value = false
+  closeModal()
+}
 
 function clearValidationError() {
   validationError.value = ''
@@ -89,6 +145,7 @@ function closeModal() {
   showAddModal.value = false
   showEditModal.value = false
   courseForm.value = { id: null, code: '', name: '' }
+  originalCourseData.value = null
   validationError.value = ''
 }
 
@@ -98,6 +155,7 @@ function closeDeleteModal() {
 }
 
 function editCourse(course) {
+  originalCourseData.value = { ...course }
   courseForm.value = { ...course }
   showEditModal.value = true
 }
@@ -164,6 +222,23 @@ async function deleteCourse() {
   } catch (err) {
     validationError.value = 'An error occurred.'
   }
+}
+
+function trySaveCourse() {
+  if (showEditModal.value) {
+    showSaveConfirmModal.value = true
+  } else {
+    saveCourse()
+  }
+}
+
+function confirmSaveCourse() {
+  showSaveConfirmModal.value = false
+  saveCourse()
+}
+
+function cancelSaveCourse() {
+  showSaveConfirmModal.value = false
 }
 
 onMounted(fetchCourses)

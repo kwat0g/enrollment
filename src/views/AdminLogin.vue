@@ -33,7 +33,7 @@ const adminStore = useAdminStore()
 
 onMounted(() => {
   if (adminStore.admins && adminStore.admins.role === 'admin') {
-    router.replace('/admin/sections')
+    router.replace('/admin/students')
   }
 })
 
@@ -49,7 +49,7 @@ async function handleLogin() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Login failed')
     adminStore.setAdmin(data.admin || data.user, data.token)
-    router.push('/admin/sections')
+    router.push('/admin/students')
   } catch (err) {
     error.value = err.message
   } finally {

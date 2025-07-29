@@ -87,9 +87,9 @@
   </div>
 </div>
         <div class="flex gap-2 justify-end">
-          <button @click="closeModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-          <button v-if="showAddModal" @click="saveRoom" class="px-4 py-2 bg-blue-900 text-white rounded">Save</button>
-          <button v-else @click="updateRoom" class="px-4 py-2 bg-blue-900 text-white rounded">Update</button>
+          <button @click="handleCancel" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">Cancel</button>
+          <button v-if="showAddModal" @click="saveRoom" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 transition">Save</button>
+          <button v-else @click="tryUpdateRoom" :disabled="!hasRoomChanges" class="px-4 py-2 rounded transition" :class="hasRoomChanges ? 'bg-blue-900 text-white hover:bg-blue-800' : 'bg-gray-400 text-gray-600 cursor-not-allowed'">Update</button>
         </div>
         <button @click="closeModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
@@ -147,7 +147,6 @@
         <div class="mb-4 text-gray-800 text-base font-semibold">{{ notifMessage }}</div>
         <button @click="showNotifModal = false" class="px-5 py-2 bg-yellow-400 text-blue-900 rounded font-bold shadow hover:bg-yellow-300 transition">OK</button>
         <button @click="showNotifModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
-      </div>
     </div>
   </div>
       <!-- Room Availability Calendar -->
@@ -173,7 +172,7 @@
               <table class="min-w-[700px] w-full border text-xs sm:text-sm">
                 <thead class="bg-gray-100">
                   <tr>
-                    <th class="py-1 px-2 text-center">Time</th>
+                    <th class="py-1 px-2 w-25 text-center">Time</th>
                     <th v-for="day in days" :key="day" class="py-1 px-2 text-center">{{ day }}</th>
                   </tr>
                 </thead>
@@ -185,7 +184,7 @@
                         v-if="shouldShowSection(day, timeIndex)"
                         class="py-1 px-2 text-center w-32"
                         :rowspan="isSlotBooked(day, time) ? getRowSpan(day, timeIndex) : 1"
-                        :class="{ 'bg-red-100': isSlotBooked(day, time), 'bg-green-50': !isSlotBooked(day, time) }"
+                        :class="{ 'bg-red-100 rounded': isSlotBooked(day, time), 'bg-green-50 rounded': !isSlotBooked(day, time) }"
                       >
                         <div v-if="isSlotBooked(day, time)" class="font-semibold text-xs text-red-900">
                           {{ getSectionName(day, time) }}
@@ -203,14 +202,57 @@
       </div>
     </div>
   </div>
+
+    <!-- Success Modal -->
+    <div v-if="showSuccessModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-green-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-green-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">{{ successMessage }}</div>
+        <button @click="showSuccessModal = false" class="px-5 py-2 bg-green-400 text-white rounded font-bold shadow hover:bg-green-300 transition">OK</button>
+        <button @click="showSuccessModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Unsaved Changes Warning Modal -->
+    <div v-if="showUnsavedWarningModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">You have unsaved changes. Are you sure you want to cancel?</div>
+        <div class="flex gap-2">
+          <button @click="confirmCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Yes, Cancel</button>
+          <button @click="showUnsavedWarningModal = false" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">No, Stay</button>
+        </div>
+        <button @click="showUnsavedWarningModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+    <!-- Save Confirmation Modal -->
+    <div v-if="showSaveConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-blue-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+        <svg class="w-10 h-10 text-blue-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">Are you sure you want to save these changes?</div>
+        <div class="flex gap-2">
+          <button @click="confirmUpdateRoom" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">Yes, Save</button>
+          <button @click="cancelUpdateRoom" class="px-4 py-2 bg-gray-300 rounded font-semibold shadow hover:bg-gray-400 transition">Cancel</button>
+        </div>
+        <button @click="showSaveConfirmModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 
 // Notification modal state
 const notifMessage = ref('')
 const showNotifModal = ref(false)
+
+// Success modal state
+const showSuccessModal = ref(false)
+const successMessage = ref('')
+
+// Unsaved changes warning modal state
+const showUnsavedWarningModal = ref(false)
 
 // Utility: show notification and close all modals that could overlap
 function showNotification(message) {
@@ -220,6 +262,30 @@ function showNotification(message) {
   showEditModal.value = false
   showDeleteModal.value = false
   // Optionally close other modals if you add more
+}
+
+// Utility: show success modal
+function showSuccess(message) {
+  successMessage.value = message
+  showSuccessModal.value = true
+  showAddModal.value = false
+  showEditModal.value = false
+  showDeleteModal.value = false
+}
+
+// Function to handle cancel with unsaved changes check
+function handleCancel() {
+  if (showEditModal.value && hasRoomChanges.value) {
+    showUnsavedWarningModal.value = true
+  } else {
+    closeModal()
+  }
+}
+
+// Function to confirm cancel (when user clicks "Yes, Cancel")
+function confirmCancel() {
+  showUnsavedWarningModal.value = false
+  closeModal()
 }
 
 
@@ -311,11 +377,11 @@ function getRowSpan(day, timeIndex) {
   const time = timeSlots[timeIndex];
   const schedule = getScheduleForSlot(day, time);
   
-  if (!schedule || !schedule.end_time) return 1;
+  if (!schedule || !schedule.end_time || !schedule.start_time) return 1;
   
-  const startTime = toMinutes(time);
-  const endTime = toMinutes(schedule.end_time);
-  const duration = endTime - startTime;
+  const scheduleStartTime = toMinutes(schedule.start_time);
+  const scheduleEndTime = toMinutes(schedule.end_time);
+  const duration = scheduleEndTime - scheduleStartTime;
   
   // Calculate how many time slots this section spans
   const slots = Math.ceil(duration / 60);
@@ -380,9 +446,23 @@ async function fetchCalendarSchedules() {
 
 
 const roomForm = ref({ id: null, name: '', capacity: 1, type: '', facilities: '', status: 'active' })
+const originalRoomData = ref(null)
 const roomToDelete = ref(null)
 const loading = ref(false)
 const deleteError = ref('')
+
+// Computed property to check if room data has changed
+const hasRoomChanges = computed(() => {
+  if (!originalRoomData.value || !showEditModal.value) return false
+  
+  return (
+    roomForm.value.name !== originalRoomData.value.name ||
+    roomForm.value.capacity !== originalRoomData.value.capacity ||
+    roomForm.value.type !== originalRoomData.value.type ||
+    roomForm.value.facilities !== originalRoomData.value.facilities ||
+    roomForm.value.status !== originalRoomData.value.status
+  )
+})
 
 // View Schedule Modal State
 const showScheduleModal = ref(false)
@@ -404,7 +484,7 @@ async function fetchRoomSchedule(room) {
   scheduleLoading.value = true
   try {
     const token = sessionStorage.getItem('admin_token')
-    const res = await fetch(`http://localhost:5000/api/admin/rooms/${encodeURIComponent(room.name)}/schedules`, {
+    const res = await fetch(`http://localhost:5000/api/admin/rooms/${room.id}/schedules`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     const data = await res.json()
@@ -425,6 +505,7 @@ function closeModal() {
   showAddModal.value = false
   showEditModal.value = false
   roomForm.value = { id: null, name: '', capacity: 1, type: '', facilities: '', status: 'active' }
+  originalRoomData.value = null
   validationError.value = ''
 }
 
@@ -436,6 +517,7 @@ function closeDeleteModal() {
 
 function editRoom(room) {
   roomForm.value = { ...room }
+  originalRoomData.value = { ...room } // Store original data
   validationError.value = ''
   showEditModal.value = true
 }
@@ -538,6 +620,7 @@ async function updateRoom() {
     if (!res.ok) throw new Error(data.error || 'Failed to update room')
     closeModal()
     await fetchRooms()
+    showSuccess('Room updated successfully!')
   } catch (err) {
     // Show backend errors (including schedule conflict) in notification modal
     showNotification(err.message)
@@ -574,8 +657,25 @@ function formatTime(timeStr) {
   return `${hour}:${m.toString().padStart(2, '0')}${ampm}`
 }
 
+const showSaveConfirmModal = ref(false)
+
+function tryUpdateRoom() {
+  if (showEditModal.value) {
+    showSaveConfirmModal.value = true
+  } else {
+    saveRoom()
+  }
+}
+
+function confirmUpdateRoom() {
+  showSaveConfirmModal.value = false
+  updateRoom()
+}
+
+function cancelUpdateRoom() {
+  showSaveConfirmModal.value = false
+}
+
 onMounted(fetchRooms)
+
 </script>
-
-<!-- Notification Modal must be inside main template, after all content but before the final </div> and </template> -->
-

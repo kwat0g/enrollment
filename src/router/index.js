@@ -39,6 +39,7 @@ const routes = [
   {
     path: '/admin',
     component: () => import('@/views/AdminDashboard.vue'),
+    redirect: '/admin/students',
     children: [
       {
         path: 'sections',
