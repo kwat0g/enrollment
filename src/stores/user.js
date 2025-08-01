@@ -21,6 +21,7 @@ export const useUserStore = defineStore('user', {
         year_level: user.year_level,
         course_id: user.course_id,
         course_name: user.course_name,
+        course_code: user.course_code,
         role: user.role,
       }
       this.token = token

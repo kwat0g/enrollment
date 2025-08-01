@@ -60,7 +60,7 @@ const getCurrentEnrollment = async (req, res) => {
     const [sectionRows] = await db.query(`SELECT * FROM sections WHERE id = ?`, [enrollment.section_id]);
     // Get schedule for this section
     const [scheduleRows] = await db.query(
-      `SELECT sc.*, sub.code as subject_code, sub.name as subject_name, sub.units, r.name as room_name
+      `SELECT sc.*, sub.code as subject_code, sub.name as subject_name, sub.units, sub.instructor, r.name as room_name
        FROM schedules sc
        JOIN subjects sub ON sc.subject_id = sub.id
        LEFT JOIN rooms r ON sc.room_id = r.id

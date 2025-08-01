@@ -12,12 +12,29 @@ const getAllRooms = async (req, res) => {
 
 // --- Admin: Get all schedules for a room (optionally filtered by day) ---
 const getRoomSchedules = async (req, res) => {
-  const roomId = req.params.id; // Changed from roomName to id
+  const roomIdentifier = req.params.id; // Can be room ID or room name
   const { day } = req.query;
+  
   try {
-    // Verify room exists
-    const [roomRows] = await db.query('SELECT id FROM rooms WHERE id = ?', [roomId]);
-    if (!roomRows.length) return res.json([]);
+    // Try to find room by name first (since frontend sends room names)
+    let roomQuery = 'SELECT id, name FROM rooms WHERE name = ?';
+    let roomParams = [roomIdentifier];
+    
+    let [roomRows] = await db.query(roomQuery, roomParams);
+    
+    // If not found by name and identifier is numeric, try by ID
+    if (!roomRows.length && !isNaN(roomIdentifier)) {
+      roomQuery = 'SELECT id, name FROM rooms WHERE id = ?';
+      roomParams = [parseInt(roomIdentifier)];
+      [roomRows] = await db.query(roomQuery, roomParams);
+    }
+    
+    if (!roomRows.length) {
+      return res.json([]);
+    }
+    
+    const room = roomRows[0];
+    const roomId = room.id;
     
     // Get all schedules for this room (optionally filter by day)
     let query = `
@@ -37,7 +54,11 @@ const getRoomSchedules = async (req, res) => {
       params.push(day);
     }
     
+    console.log('Final query:', query);
+    console.log('Query params:', params);
+    
     const [schedules] = await db.query(query, params);
+    
     res.json(schedules);
   } catch (err) {
     console.error('Error in getRoomSchedules:', err);

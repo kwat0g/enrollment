@@ -11,7 +11,7 @@ const studentLogin = async (req, res) => {
   }
   try {
     const [rows] = await db.query(
-      `SELECT s.id, s.student_id, s.last_name, s.first_name, s.middle_name, s.suffix, s.gender, s.address, s.contact_number, s.email, s.year_level, s.course_id, c.name as course_name
+      `SELECT s.id, s.student_id, s.last_name, s.first_name, s.middle_name, s.suffix, s.gender, s.address, s.contact_number, s.email, s.year_level, s.course_id, c.name as course_name, c.code as course_code
        FROM students s
        JOIN courses c ON s.course_id = c.id
        WHERE s.student_id = ? AND s.last_name = ? LIMIT 1`,
@@ -49,6 +49,7 @@ const studentLogin = async (req, res) => {
         year_level: student.year_level,
         course_id: student.course_id,
         course_name: student.course_name,
+        course_code: student.course_code,
         role: 'student',
       },
     });

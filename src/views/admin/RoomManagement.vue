@@ -187,7 +187,8 @@
                         :class="{ 'bg-red-100 rounded': isSlotBooked(day, time), 'bg-green-50 rounded': !isSlotBooked(day, time) }"
                       >
                         <div v-if="isSlotBooked(day, time)" class="font-semibold text-xs text-red-900">
-                          {{ getSectionName(day, time) }}
+                          <div class="mb-1">{{ getScheduleForSlot(day, time)?.section_name || 'Occupied' }}</div>
+                          <div class="text-xs text-red-700">{{ getScheduleTimeRange(day, time) }}</div>
                         </div>
                         <div v-else class="text-green-700">Available</div>
                       </td>
@@ -359,6 +360,37 @@ function getSectionName(day, time) {
   return schedule ? schedule.section_name || 'Occupied' : 'Available';
 }
 
+function getScheduleTimeRange(day, time) {
+  const schedule = getScheduleForSlot(day, time);
+  if (!schedule) return '';
+  
+  const startTime = formatTimeForDisplay(schedule.start_time);
+  const endTime = formatTimeForDisplay(schedule.end_time);
+  
+  return `${startTime}-${endTime}`;
+}
+
+// Helper function to format time for display
+function formatTimeForDisplay(timeStr) {
+  if (!timeStr) return '';
+  
+  // Handle 24-hour format (e.g., "13:00:00" or "13:00")
+  const time24Match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (time24Match) {
+    let [, h, m] = time24Match;
+    let hour = parseInt(h, 10);
+    const minute = m;
+    
+    if (hour === 0) return `12:${minute}AM`;
+    if (hour < 12) return `${hour}:${minute}AM`;
+    if (hour === 12) return `12:${minute}PM`;
+    return `${hour - 12}:${minute}PM`;
+  }
+  
+  // If already in 12-hour format, return as is
+  return timeStr;
+}
+
 function getScheduleForSlot(day, time) {
   const schedules = calendarSchedules.value || [];
   const slotStart = toMinutes(time);
@@ -381,11 +413,28 @@ function getRowSpan(day, timeIndex) {
   
   const scheduleStartTime = toMinutes(schedule.start_time);
   const scheduleEndTime = toMinutes(schedule.end_time);
-  const duration = scheduleEndTime - scheduleStartTime;
   
-  // Calculate how many time slots this section spans
-  const slots = Math.ceil(duration / 60);
-  return Math.max(1, slots);
+  // Find the time slot index that corresponds to the schedule start time
+  const startSlotIndex = timeSlots.findIndex(slot => {
+    const slotTime = toMinutes(slot);
+    return slotTime <= scheduleStartTime && scheduleStartTime < slotTime + 60;
+  });
+  
+  // Find the time slot index that corresponds to the schedule end time
+  const endSlotIndex = timeSlots.findIndex(slot => {
+    const slotTime = toMinutes(slot);
+    return slotTime < scheduleEndTime && scheduleEndTime <= slotTime + 60;
+  });
+  
+  // If we can't find proper indices, fall back to duration-based calculation
+  if (startSlotIndex === -1 || endSlotIndex === -1) {
+    const duration = scheduleEndTime - scheduleStartTime;
+    return Math.max(1, Math.ceil(duration / 60));
+  }
+  
+  // Calculate span: from start slot to end slot (inclusive)
+  const span = endSlotIndex - startSlotIndex + 1;
+  return Math.max(1, span);
 }
 
 function shouldShowSection(day, timeIndex) {

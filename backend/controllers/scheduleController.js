@@ -1,97 +1,262 @@
 const { db } = require('../config/database');
 const { getSectionEnrollmentStatus } = require('../utils/helpers');
 
-// --- Admin: Assign subjects to a section ---
+// --- Admin: Assign subjects to a section (Enhanced) ---
 const assignSubjectsToSection = async (req, res) => {
-  const { subjectIds } = req.body;
+  const { subjectIds, validateOnly = false, mode = 'add' } = req.body;
   const sectionId = req.params.sectionId;
   
   try {
-    // Get section info
-    const [sectionRows] = await db.query('SELECT * FROM sections WHERE id = ?', [sectionId]);
+    // Enhanced validation
+    if (!sectionId || isNaN(sectionId)) {
+      return res.status(400).json({ error: 'Invalid section ID provided.' });
+    }
+    
+    if (!Array.isArray(subjectIds)) {
+      return res.status(400).json({ error: 'Subject IDs must be provided as an array.' });
+    }
+
+    // Get section info with course details
+    const [sectionRows] = await db.query(
+      `SELECT s.*, c.name as course_name, c.code as course_code 
+       FROM sections s 
+       JOIN courses c ON s.course_id = c.id 
+       WHERE s.id = ?`, 
+      [sectionId]
+    );
     if (!sectionRows.length) {
       return res.status(404).json({ error: 'Section not found.' });
     }
     const section = sectionRows[0];
     
-    // Check if section is open - prevent editing subjects if open
+    // Enhanced status checks
     if (section.status === 'open') {
-      return res.status(400).json({ error: 'Cannot modify subjects: section is currently open for enrollment.' });
+      return res.status(400).json({ 
+        error: 'Cannot modify subjects: section is currently open for enrollment.',
+        details: 'Close the section first to make changes.'
+      });
     }
     
-    // Get current subjects assigned to this section
-    const [currentSchedules] = await db.query('SELECT DISTINCT subject_id FROM schedules WHERE section_id = ?', [sectionId]);
+    // Check enrollment status with more detailed feedback
+    const studentsEnrolled = await getSectionEnrollmentStatus(sectionId);
+    if (studentsEnrolled === 'approved') {
+      const [enrolledCount] = await db.query(
+        'SELECT COUNT(*) as count FROM enrollments WHERE section_id = ? AND status = "approved"',
+        [sectionId]
+      );
+      return res.status(400).json({ 
+        error: 'Cannot modify subjects: students are already enrolled in this section.',
+        details: `${enrolledCount[0].count} student(s) currently enrolled.`
+      });
+    }
+    if (studentsEnrolled === 'pending') {
+      const [pendingCount] = await db.query(
+        'SELECT COUNT(*) as count FROM enrollments WHERE section_id = ? AND status = "pending"',
+        [sectionId]
+      );
+      return res.status(400).json({ 
+        error: 'Cannot modify subjects: there are pending enrollments for this section.',
+        details: `${pendingCount[0].count} pending enrollment(s) found.`
+      });
+    }
+    
+    // Get current subjects with detailed info
+    const [currentSchedules] = await db.query(
+      `SELECT DISTINCT s.subject_id, sub.code, sub.name 
+       FROM schedules s 
+       JOIN subjects sub ON s.subject_id = sub.id 
+       WHERE s.section_id = ?`, 
+      [sectionId]
+    );
     const currentSubjectIds = currentSchedules.map(s => s.subject_id);
     const newSubjectIds = subjectIds || [];
     
-    // Determine what to add/remove
-    const toRemove = currentSubjectIds.filter(id => !newSubjectIds.includes(id));
-    const toAdd = newSubjectIds.filter(id => !currentSubjectIds.includes(id));
-
-    // Check if students are enrolled or pending
-    const studentsEnrolled = await getSectionEnrollmentStatus(sectionId);
-    if (studentsEnrolled === 'approved') {
-      return res.status(400).json({ error: 'Cannot modify subjects: students are already enrolled in this section for the current term.' });
-    }
-    if (studentsEnrolled === 'pending') {
-      return res.status(400).json({ error: 'Cannot modify subjects: there are pending enrollments for this section in the current term.' });
-    }
-
-    // Remove schedules for subjects being removed
-    if (toRemove.length > 0) {
-      for (const subjectId of toRemove) {
-        await db.query('DELETE FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subjectId]);
-      }
-    }
-
-    // For each subject being added, copy template schedule or create new
-    if (toAdd.length > 0) {
-      // Get all subjects to be assigned
+    // Enhanced subject validation
+    if (newSubjectIds.length > 0) {
       const [subjects] = await db.query(
         'SELECT * FROM subjects WHERE id IN (?)',
-        [toAdd]
+        [newSubjectIds]
       );
-      // Filter subjects that match section's year_level and course_id
-      const validSubjects = subjects.filter(subject => 
-        subject.year_level === section.year_level && subject.course_id === section.course_id
-      );
-      if (validSubjects.length !== toAdd.length) {
-        return res.status(400).json({ error: 'One or more subjects do not match the section\'s year level or course.' });
+      
+      if (subjects.length !== newSubjectIds.length) {
+        const foundIds = subjects.map(s => s.id);
+        const missingIds = newSubjectIds.filter(id => !foundIds.includes(id));
+        return res.status(400).json({ 
+          error: 'Some subjects were not found.',
+          details: `Missing subject IDs: ${missingIds.join(', ')}`
+        });
       }
-
-      for (const subject of validSubjects) {
-        // Try to copy template schedule first
-        let scheduleRow = null;
-        const [templateRows] = await db.query(
-          'SELECT * FROM schedules WHERE subject_id = ? AND section_id = 0 LIMIT 1',
-          [subject.id]
-        );
-        if (templateRows.length > 0) {
-          scheduleRow = templateRows[0];
-        }
-
-        // Use template data or defaults
-        const room_id = scheduleRow ? scheduleRow.room_id : null;
-        const day = scheduleRow ? scheduleRow.day : '';
-        const start_time = scheduleRow ? scheduleRow.start_time : '';
-        const end_time = scheduleRow ? scheduleRow.end_time : '';
-        const type = scheduleRow ? scheduleRow.type : subject.type || '';
-
-        // Insert schedule for this section/subject
-        // Check for room conflicts using helper
-        const conflictMsg = await checkRoomScheduleConflict(room_id, day, start_time, end_time);
-        if (conflictMsg) {
-          return res.status(400).json({ error: conflictMsg });
-        }
-        await db.query(
-          'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [sectionId, subject.id, room_id, day, start_time, end_time, type]
-        );
+      
+      // Check subject compatibility with enhanced feedback
+      const incompatibleSubjects = subjects.filter(subject => 
+        subject.year_level !== section.year_level || subject.course_id !== section.course_id
+      );
+      
+      if (incompatibleSubjects.length > 0) {
+        const details = incompatibleSubjects.map(s => 
+          `${s.code} (Year ${s.year_level}, Course ID ${s.course_id})`
+        ).join(', ');
+        return res.status(400).json({ 
+          error: `Subjects incompatible with section (${section.course_code} Year ${section.year_level}).`,
+          details: `Incompatible subjects: ${details}`
+        });
+      }
+      
+      // Check for duplicate subjects within the same section
+      const duplicates = newSubjectIds.filter((id, index) => newSubjectIds.indexOf(id) !== index);
+      if (duplicates.length > 0) {
+        return res.status(400).json({ 
+          error: 'Duplicate subjects detected in assignment.',
+          details: `Duplicate subject IDs: ${duplicates.join(', ')}`
+        });
       }
     }
-    res.json({ success: true });
+    
+    // If validation only, return success
+    if (validateOnly) {
+      return res.json({ 
+        valid: true, 
+        message: 'Subjects are valid for assignment.',
+        section: {
+          id: section.id,
+          name: section.name,
+          course: section.course_name,
+          year_level: section.year_level
+        }
+      });
+    }
+    
+    // Determine changes with detailed tracking
+    // FIX: Change logic to be additive (only add new subjects) to prevent NULL values in existing subjects
+    let toRemove = [];
+    let toAdd = [];
+    let unchanged = [];
+    
+    if (mode === 'replace') {
+      // Only use replacement mode when explicitly requested (e.g., from edit modal)
+      toRemove = currentSubjectIds.filter(id => !newSubjectIds.includes(id));
+      toAdd = newSubjectIds.filter(id => !currentSubjectIds.includes(id));
+      unchanged = currentSubjectIds.filter(id => newSubjectIds.includes(id));
+    } else {
+      // Default additive mode: only add new subjects, don't remove existing ones
+      toRemove = []; // Don't remove any existing subjects
+      toAdd = newSubjectIds.filter(id => !currentSubjectIds.includes(id));
+      unchanged = currentSubjectIds; // All existing subjects remain unchanged
+    }
+    
+    // Transaction for atomic operations
+    await db.query('START TRANSACTION');
+    
+    try {
+      // Remove schedules for subjects being removed (only in replace mode)
+      if (toRemove.length > 0) {
+        const [removedSubjects] = await db.query(
+          'SELECT code, name FROM subjects WHERE id IN (?)',
+          [toRemove]
+        );
+        
+        for (const subjectId of toRemove) {
+          await db.query('DELETE FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subjectId]);
+        }
+      }
+
+      // Add new subjects with enhanced template logic
+      const addedSubjects = [];
+      if (toAdd.length > 0) {
+        const [subjects] = await db.query(
+          'SELECT * FROM subjects WHERE id IN (?)',
+          [toAdd]
+        );
+        
+        for (const subject of subjects) {
+          // Enhanced template search - look for similar subjects first
+          let scheduleTemplate = null;
+          
+          // 1. Try exact subject template
+          const [exactTemplate] = await db.query(
+            'SELECT * FROM schedules WHERE subject_id = ? AND section_id = 0 LIMIT 1',
+            [subject.id]
+          );
+          
+          if (exactTemplate.length > 0) {
+            scheduleTemplate = exactTemplate[0];
+          } else {
+            // 2. Try similar subject in same course/year
+            const [similarTemplate] = await db.query(
+              `SELECT sch.* FROM schedules sch 
+               JOIN subjects sub ON sch.subject_id = sub.id 
+               WHERE sub.course_id = ? AND sub.year_level = ? AND sub.type = ? 
+               AND sch.section_id = 0 
+               ORDER BY sch.id DESC LIMIT 1`,
+              [subject.course_id, subject.year_level, subject.type]
+            );
+            
+            if (similarTemplate.length > 0) {
+              scheduleTemplate = similarTemplate[0];
+            }
+          }
+
+          // Use template data or intelligent defaults
+          const room_id = scheduleTemplate ? scheduleTemplate.room_id : null;
+          const day = scheduleTemplate ? scheduleTemplate.day : '';
+          const start_time = scheduleTemplate ? scheduleTemplate.start_time : '';
+          const end_time = scheduleTemplate ? scheduleTemplate.end_time : '';
+          const type = scheduleTemplate ? scheduleTemplate.type : subject.type || 'Lec';
+
+          // Enhanced conflict checking
+          if (room_id && day && start_time && end_time) {
+            const conflictMsg = await checkRoomScheduleConflict(room_id, day, start_time, end_time, sectionId);
+            if (conflictMsg) {
+              await db.query('ROLLBACK');
+              return res.status(400).json({ 
+                error: `Schedule conflict for ${subject.code}: ${conflictMsg}`,
+                subject: subject.code
+              });
+            }
+          }
+
+          // Insert schedule
+          await db.query(
+            'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [sectionId, subject.id, room_id, day, start_time, end_time, type]
+          );
+          
+          addedSubjects.push({
+            id: subject.id,
+            code: subject.code,
+            name: subject.name,
+            hasTemplate: !!scheduleTemplate
+          });
+        }
+      }
+      
+      await db.query('COMMIT');
+      
+      // Return detailed success response
+      res.json({ 
+        success: true,
+        changes: {
+          added: addedSubjects.length,
+          removed: toRemove.length,
+          unchanged: unchanged.length
+        },
+        details: {
+          addedSubjects,
+          message: `Successfully updated section assignments. ${addedSubjects.length} subjects added, ${toRemove.length} removed.`
+        }
+      });
+      
+    } catch (transactionErr) {
+      await db.query('ROLLBACK');
+      throw transactionErr;
+    }
+    
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Server error.' });
+    console.error('Error in assignSubjectsToSection:', err);
+    res.status(500).json({ 
+      error: 'Server error occurred while assigning subjects.',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Please try again later.'
+    });
   }
 };
 
@@ -188,44 +353,79 @@ const bulkAssignSchedules = async (req, res) => {
   }
 };
 
-// Helper: Check for room schedule conflict
-async function checkRoomScheduleConflict(roomId, day, start_time, end_time) {
-  // Helper: convert HH:mm to minutes
+// Enhanced Helper: Check for room schedule conflict
+async function checkRoomScheduleConflict(roomId, day, start_time, end_time, excludeSectionId = null) {
+  if (!roomId || !day || !start_time || !end_time) {
+    return null; // No conflict if incomplete schedule
+  }
+  
+  // Helper: convert HH:mm to minutes for better comparison
   const toMinutes = t => {
     if (!t) return 0;
     const [h, m] = t.split(':').map(Number);
     return h * 60 + m;
   };
+  
   const s1 = toMinutes(start_time), e1 = toMinutes(end_time);
-  const [existingSchedules] = await db.query('SELECT * FROM schedules WHERE room_id = ? AND day = ?', [roomId, day]);
+  
+  // Validate time range
+  if (s1 >= e1) {
+    return 'Invalid time range: start time must be before end time.';
+  }
+  
+  // Query existing schedules, excluding the current section if specified
+  let query = 'SELECT sch.*, sec.name as section_name FROM schedules sch JOIN sections sec ON sch.section_id = sec.id WHERE sch.room_id = ? AND sch.day = ?';
+  let params = [roomId, day];
+  
+  if (excludeSectionId) {
+    query += ' AND sch.section_id != ?';
+    params.push(excludeSectionId);
+  }
+  
+  const [existingSchedules] = await db.query(query, params);
+  
   for (const existing of existingSchedules) {
     const s2 = toMinutes(existing.start_time), e2 = toMinutes(existing.end_time);
-    if (s1 < e2 && s2 < e1) {
-      // Return error string if conflict
-      return `Room conflict: this room is already booked on ${day} from ${existing.start_time} to ${existing.end_time}.`;
+    
+    // Check for time overlap (with 15-minute buffer for room transitions)
+    const bufferMinutes = 15;
+    if ((s1 < e2 + bufferMinutes) && (s2 < e1 + bufferMinutes)) {
+      const [roomInfo] = await db.query('SELECT name FROM rooms WHERE id = ?', [roomId]);
+      const roomName = roomInfo[0]?.name || `Room ID ${roomId}`;
+      
+      return `Schedule conflict in ${roomName} on ${day.toUpperCase()}: ` +
+             `${existing.section_name} is scheduled from ${existing.start_time} to ${existing.end_time}. ` +
+             `Please choose a different time slot (consider 15-minute buffer for transitions).`;
     }
   }
-  return null;
+  
+  return null; // No conflict
 }
 
 // --- Admin: Assign subjects to a section with schedules (robust, partial update) ---
 const assignWithSchedules = async (req, res) => {
   const sectionId = req.params.sectionId;
-  const { subjectIds, schedules } = req.body;
+  const { subjectIds, schedules, mode = 'add' } = req.body;
+  
   if (!Array.isArray(subjectIds) || subjectIds.length === 0 || !Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({ error: 'Subjects and schedules are required.' });
   }
   try {
     // Get all current schedules for this section
-    const [currentSchedules] = await db.query('SELECT subject_id FROM schedules WHERE section_id = ?', [sectionId]);
+    const [currentSchedules] = await db.query('SELECT * FROM schedules WHERE section_id = ?', [sectionId]);
     const currentSubjectIds = currentSchedules.map(s => s.subject_id.toString());
     const newSubjectIds = subjectIds.map(String);
 
-    // Delete schedules for subjects that are no longer assigned
-    const toRemove = currentSubjectIds.filter(id => !newSubjectIds.includes(id));
-    for (const subjectId of toRemove) {
-      await db.query('DELETE FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subjectId]);
+    // FIX: Only remove subjects when in 'replace' mode to prevent NULL values bug
+    let toRemove = [];
+    if (mode === 'replace') {
+      // Delete schedules for subjects that are no longer assigned (only in replace mode)
+      toRemove = currentSubjectIds.filter(id => !newSubjectIds.includes(id));
+      for (const subjectId of toRemove) {
+        await db.query('DELETE FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subjectId]);
+      }
     }
+    // In 'add' mode (default), we don't remove any existing subjects
 
     // For each schedule in the request, update if exists, else insert
     for (const sched of schedules) {
@@ -244,8 +444,10 @@ const assignWithSchedules = async (req, res) => {
           roomId = insertResult.insertId;
         }
       }
+      
       // Check if schedule exists
       const [existing] = await db.query('SELECT id FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subject_id]);
+      
       if (existing.length) {
         // Update existing schedule
         await db.query(
@@ -260,6 +462,7 @@ const assignWithSchedules = async (req, res) => {
         );
       }
     }
+    
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });

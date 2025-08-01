@@ -71,17 +71,17 @@ app.delete('/api/admin/subjects/:id', subjectController.deleteSubject);
 app.get('/api/admin/subjects/:id', subjectController.getSubject);
 
 // === SCHEDULE MANAGEMENT ROUTES ===
-app.post('/api/admin/sections/:sectionId/subjects', scheduleController.assignSubjectsToSection);
-app.delete('/api/admin/sections/:sectionId/subjects/:subjectId', scheduleController.removeSubjectFromSection);
-app.post('/api/admin/cleanup-mismatched-schedules', scheduleController.cleanupMismatchedSchedules);
-app.post('/api/admin/sections/:sectionId/schedules/bulk', scheduleController.bulkAssignSchedules);
-app.post('/api/admin/sections/:sectionId/assign-with-schedules', scheduleController.assignWithSchedules);
-app.get('/api/admin/sections/:sectionId/subjects/:subjectId', scheduleController.getSectionSubjectSchedule);
-app.get('/api/admin/subjects/:id/schedule', scheduleController.getSubjectSchedule);
-app.put('/api/admin/subjects/:id/schedule', scheduleController.updateSubjectSchedule);
-app.get('/api/admin/subjects/:id/schedules', scheduleController.getSubjectSchedules);
-app.get('/api/admin/subjects/:id/full-schedules', scheduleController.getSubjectFullSchedules);
-app.get('/api/admin/schedules/full', scheduleController.getAllSchedulesFull);
+app.post('/api/admin/sections/:sectionId/subjects', authAdmin, scheduleController.assignSubjectsToSection);
+app.post('/api/admin/sections/:sectionId/subjects/validate', authAdmin, scheduleController.assignSubjectsToSection); 
+app.delete('/api/admin/sections/:sectionId/subjects/:subjectId', authAdmin, scheduleController.removeSubjectFromSection);
+app.post('/api/admin/sections/:sectionId/schedules', authAdmin, scheduleController.bulkAssignSchedules);
+app.post('/api/admin/sections/:sectionId/assign-with-schedules', authAdmin, scheduleController.assignWithSchedules);
+app.get('/api/admin/sections/:sectionId/subjects/:subjectId/schedule', authAdmin, scheduleController.getSectionSubjectSchedule);
+app.get('/api/admin/subjects/:subjectId/schedule', authAdmin, scheduleController.getSubjectSchedule);
+app.put('/api/admin/subjects/:subjectId/schedule', authAdmin, scheduleController.updateSubjectSchedule);
+app.get('/api/admin/subjects/:subjectId/schedules', authAdmin, scheduleController.getSubjectSchedules);
+app.get('/api/admin/subjects/:subjectId/schedules/full', authAdmin, scheduleController.getSubjectFullSchedules);
+app.get('/api/admin/schedules', authAdmin, scheduleController.getAllSchedulesFull);
 
 // === STUDENT MANAGEMENT ROUTES ===
 app.get('/api/admin/students/next-id', adminStudentController.getNextStudentId);

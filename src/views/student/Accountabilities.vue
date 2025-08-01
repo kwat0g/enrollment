@@ -21,11 +21,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in accountabilities" :key="item.id" class="text-gray-900">
+            <tr v-for="item in accountabilities.filter(acc => acc.status === 'pending')" :key="item.id" class="text-gray-900">
               <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ item.type }}</td>
               <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ item.description }}</td>
               <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">
-                <span :class="item.status === 'pending' ? 'text-yellow-700 font-bold' : 'text-green-600'">
+                <span class="text-yellow-700 font-bold">
                   {{ item.status }}
                 </span>
               </td>
@@ -33,16 +33,14 @@
             </tr>
           </tbody>
         </table>
-        <div v-if="!accountabilities.length" class="text-center text-green-700 font-bold mt-6 text-sm sm:text-base">No accountabilities!</div>
+        <div v-if="!accountabilities.filter(acc => acc.status === 'pending').length" class="text-center text-green-700 font-bold mt-6 text-sm sm:text-base">No pending accountabilities!</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { useUserStore } from '@/stores/user'
-import { useStudentData } from '@/composables/useStudentData'
+import { initializeAccountabilities } from '@/scripts/student/accountabilities.js'
 
-const userStore = useUserStore()
-const { accountabilities, loading, error, refresh } = useStudentData(userStore.user?.id)
-</script> 
+const { userStore, accountabilities, loading, error, refresh } = initializeAccountabilities()
+</script>
