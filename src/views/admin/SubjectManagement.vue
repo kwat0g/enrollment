@@ -27,7 +27,7 @@ const showConfirmDeleteModal = ref(false)
 const subjectToDelete = ref(null)
 const showSaveConfirmModal = ref(false)
 
-async function fetchCourses() {
+async function fetchCourses() {``
   try {
     const token = sessionStorage.getItem('admin_token')
     const res = await fetch('http://localhost:5000/api/admin/courses', {
