@@ -76,7 +76,50 @@ const adminLogin = async (req, res) => {
   }
 };
 
+// --- Token Refresh Endpoint ---
+const refreshToken = async (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required.' });
+  }
+
+  try {
+    // Verify the existing token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Generate a new token with the same payload but new expiration
+    const newToken = jwt.sign(
+      {
+        id: decoded.id,
+        student_id: decoded.student_id,
+        username: decoded.username,
+        role: decoded.role,
+        year_level: decoded.year_level,
+        course_id: decoded.course_id,
+      },
+      JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    res.json({ 
+      token: newToken,
+      message: 'Token refreshed successfully'
+    });
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token has expired. Please login again.' });
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token.' });
+    }
+    console.error('Token refresh error:', err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+};
+
 module.exports = {
   studentLogin,
-  adminLogin
+  adminLogin,
+  refreshToken
 };

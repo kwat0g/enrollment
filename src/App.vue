@@ -20,6 +20,10 @@ const adminStore = useAdminStore()
 onMounted(() => {
   userStore.loadFromStorage()
   adminStore.loadFromStorage()
+  
+  // Initialize cross-tab synchronization
+  userStore.initStorageSync()
+  adminStore.initStorageSync()
 })
 
 function logout() {

@@ -1,9 +1,28 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { useAdminStore } from '@/stores/admin'
 
 const routes = [
   {
     path: '/',
-    redirect: '/login',
+    name: 'Home',
+    beforeEnter: (to, from, next) => {
+      // Check authentication state and redirect accordingly
+      const userStore = useUserStore()
+      const adminStore = useAdminStore()
+      
+      // Load from storage first
+      userStore.loadFromStorage()
+      adminStore.loadFromStorage()
+      
+      if (adminStore.isAuthenticated()) {
+        next('/admin')
+      } else if (userStore.isAuthenticated()) {
+        next('/student')
+      } else {
+        next('/login')
+      }
+    },
   },
   {
     path: '/login',
@@ -94,6 +113,61 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+// Global navigation guard
+router.beforeEach((to, from, next) => {
+  const userStore = useUserStore()
+  const adminStore = useAdminStore()
+  
+  // Load from storage on each navigation
+  userStore.loadFromStorage()
+  adminStore.loadFromStorage()
+  
+  // Define protected routes
+  const adminRoutes = ['/admin']
+  const studentRoutes = ['/student', '/dashboard']
+  const publicRoutes = ['/login', '/@dminlogin-']
+  
+  const isAdminRoute = adminRoutes.some(route => to.path.startsWith(route))
+  const isStudentRoute = studentRoutes.some(route => to.path.startsWith(route))
+  const isPublicRoute = publicRoutes.some(route => to.path.startsWith(route))
+  
+  // Check admin authentication
+  if (isAdminRoute && !adminStore.isAuthenticated()) {
+    next('/@dminlogin-')
+    return
+  }
+  
+  // Check student authentication
+  if (isStudentRoute && !userStore.isAuthenticated()) {
+    next('/login')
+    return
+  }
+  
+  // Redirect authenticated users away from login pages
+  if (to.path === '/login' && userStore.isAuthenticated()) {
+    next('/student')
+    return
+  }
+  
+  if (to.path === '/login' && adminStore.isAuthenticated()) {
+    next('/admin')
+    return
+  }
+  
+  // Redirect authenticated users away from admin login page
+  if (to.path === '/@dminlogin-' && adminStore.isAuthenticated()) {
+    next('/admin')
+    return
+  }
+  
+  if (to.path === '/@dminlogin-' && userStore.isAuthenticated()) {
+    next('/student')
+    return
+  }
+  
+  next()
 })
 
 export default router
