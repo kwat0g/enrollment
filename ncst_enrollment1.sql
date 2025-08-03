@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 29, 2025 at 02:31 PM
+-- Generation Time: Aug 03, 2025 at 02:54 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -98,6 +98,16 @@ CREATE TABLE `enrollments` (
   `reference_number` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `enrollments`
+--
+
+INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `date_applied`, `reference_number`) VALUES
+(1, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:22:45', NULL),
+(2, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:25:11', NULL),
+(3, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:26:31', NULL),
+(4, 1, 1, '2025-2026', '1st Semester', 'approved', '2025-08-01 20:44:57', 'ENR-20250801-4');
+
 -- --------------------------------------------------------
 
 --
@@ -128,6 +138,15 @@ CREATE TABLE `notifications` (
   `is_read` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `notifications`
+--
+
+INSERT INTO `notifications` (`id`, `student_id`, `message`, `type`, `created_at`, `is_read`) VALUES
+(1, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:23:35', 1),
+(2, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:25:59', 1),
+(3, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:29:43', 1);
+
 -- --------------------------------------------------------
 
 --
@@ -148,7 +167,7 @@ CREATE TABLE `rooms` (
 --
 
 INSERT INTO `rooms` (`id`, `name`, `capacity`, `type`, `facilities`, `status`) VALUES
-(3, '1108', 50, 'Lecture', 'Computer', 'active');
+(3, '1108', 45, 'Lecture', 'Computer', 'active');
 
 -- --------------------------------------------------------
 
@@ -172,7 +191,9 @@ CREATE TABLE `schedules` (
 --
 
 INSERT INTO `schedules` (`id`, `section_id`, `subject_id`, `room_id`, `day`, `start_time`, `end_time`, `type`) VALUES
-(11, 1, 1, 3, 'Monday', '13:00:00', '17:00:00', 'Lab');
+(47, 1, 3, 3, 'Tuesday', '14:00:00', '15:00:00', 'Lab'),
+(50, 1, 2, 3, 'Saturday', '13:00:00', '14:00:00', 'Lec'),
+(51, 1, 1, 3, 'Wednesday', '12:00:00', '17:00:00', 'Lab');
 
 -- --------------------------------------------------------
 
@@ -195,7 +216,8 @@ CREATE TABLE `sections` (
 
 INSERT INTO `sections` (`id`, `name`, `year_level`, `course_id`, `schedule_type`, `status`) VALUES
 (0, 'Template', '', 1, '', 'template'),
-(1, 'BSIT-31A2', '3rd', 1, 'afternoon', 'closed');
+(1, 'BSIT-31A2', '3rd', 1, 'afternoon', 'closed'),
+(18, 'BSIT-41M2', '4th', 1, 'morning', 'closed');
 
 -- --------------------------------------------------------
 
@@ -223,7 +245,7 @@ CREATE TABLE `students` (
 --
 
 INSERT INTO `students` (`id`, `student_id`, `last_name`, `first_name`, `middle_name`, `suffix`, `gender`, `address`, `contact_number`, `email`, `year_level`, `course_id`) VALUES
-(1, '2025-00001', 'Bungubung', 'Ehdrian', 'Latras', '', 'Male', 'Blk 5 Lot 10', '09123456789', 'bungubung.ehdrian@ncst.edu.ph', '3rd', 1);
+(1, '2025-00001', 'Bungubung', 'Ehdrian', 'Latras', '', 'Male', 'Blk 5 ', '09123456789', 'bungubung.ehdrian@ncst.edu.ph', '3rd', 1);
 
 -- --------------------------------------------------------
 
@@ -247,7 +269,9 @@ CREATE TABLE `subjects` (
 --
 
 INSERT INTO `subjects` (`id`, `code`, `name`, `units`, `type`, `course_id`, `year_level`, `instructor`) VALUES
-(1, 'IT301', 'INTEG', 2, 'Lab', 1, '3rd', 'Jarmaine Diegas');
+(1, 'IT301', 'INTEG', 2, 'Lab', 1, '3rd', 'Jarmaine Diegas'),
+(2, 'IT301', 'INTEG', 1, 'Lec', 1, '3rd', 'Gnehm Ryien Rabe'),
+(3, 'IT302', 'HCI', 2, 'Lab', 1, '3rd', 'EWAN');
 
 --
 -- Indexes for dumped tables
@@ -359,7 +383,7 @@ ALTER TABLE `courses`
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `grades`
@@ -371,7 +395,7 @@ ALTER TABLE `grades`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `rooms`
@@ -383,13 +407,13 @@ ALTER TABLE `rooms`
 -- AUTO_INCREMENT for table `schedules`
 --
 ALTER TABLE `schedules`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=70;
 
 --
 -- AUTO_INCREMENT for table `sections`
 --
 ALTER TABLE `sections`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `students`
@@ -401,7 +425,7 @@ ALTER TABLE `students`
 -- AUTO_INCREMENT for table `subjects`
 --
 ALTER TABLE `subjects`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- Constraints for dumped tables
