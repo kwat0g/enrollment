@@ -2,10 +2,11 @@ const mysql = require('mysql2/promise');
 
 // MySQL config
 const db = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'ncst_enrollment1', // set your database name
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'ncst_enrollment1',
+  port: process.env.DB_PORT || 3306,
 });
 
 module.exports = { db };
