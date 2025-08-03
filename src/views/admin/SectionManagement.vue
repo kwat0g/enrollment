@@ -826,6 +826,39 @@ function saveFromUnsavedModal() {
 const showSaveSchedulesConfirm = ref(false)
 
 function confirmSaveSchedules() {
+  // Check for missing fields first
+  let hasError = false
+  for (const sched of pendingSchedules.value) {
+    sched._missing = []
+    if (!sched.day) sched._missing.push('day')
+    if (!sched.start_time) sched._missing.push('start_time')
+    if (!sched.end_time) sched._missing.push('end_time')
+    if (!sched.room) sched._missing.push('room')
+    if (sched._missing.length > 0) hasError = true
+  }
+  
+  if (hasError) {
+    notifMessage.value = 'Please fill in all schedule fields for each subject.'
+    showNotifModal.value = true
+    return
+  }
+  
+  // Get the section's schedule type for validation
+  const sectionId = showEditModal.value ? editSection.value.id : subjectAssignSectionId.value
+  const section = sections.value.find(s => s.id == sectionId)
+  const scheduleType = section?.schedule_type || 'afternoon' // Default to afternoon if not found
+  
+  // Validate time constraints for each subject
+  for (const sched of pendingSchedules.value) {
+    const timeValidation = validateTimeConstraints(sched.start_time, sched.end_time, scheduleType)
+    if (!timeValidation.valid) {
+      notifMessage.value = `${sched.code}: ${timeValidation.message}`
+      showNotifModal.value = true
+      return
+    }
+  }
+  
+  // If validation passes, show confirmation modal
   showSaveSchedulesConfirm.value = true
 }
 
@@ -1028,6 +1061,9 @@ async function autoGenerateSchedules() {
       )
     }
     
+    // Track which subject codes have been assigned to which days
+    const subjectCodeDayAssignments = new Map() // Map<subjectCode, Set<day>>
+    
     // Auto-assign schedules for each subject
     for (const subject of pendingSchedules.value) {
       let assigned = false
@@ -1035,6 +1071,14 @@ async function autoGenerateSchedules() {
       // Try to find an available slot
       for (const day of days) {
         if (assigned) break
+        
+        // Check if this subject code is already assigned to this day
+        if (subjectCodeDayAssignments.has(subject.code)) {
+          const assignedDays = subjectCodeDayAssignments.get(subject.code)
+          if (assignedDays.has(day)) {
+            continue // Skip this day, try next day
+          }
+        }
         
         for (const room of rooms.value) {
           if (assigned) break
@@ -1046,6 +1090,12 @@ async function autoGenerateSchedules() {
               subject.start_time = timeSlot.start
               subject.end_time = timeSlot.end
               subject.room = room.name
+              
+              // Track this subject code assignment to this day
+              if (!subjectCodeDayAssignments.has(subject.code)) {
+                subjectCodeDayAssignments.set(subject.code, new Set())
+              }
+              subjectCodeDayAssignments.get(subject.code).add(day)
               
               // Add this assignment to existing schedules to avoid double-booking
               existingSchedules.push({
@@ -1082,21 +1132,6 @@ async function autoGenerateSchedules() {
 async function saveAssignedSchedules() {
   try {
     const token = sessionStorage.getItem('admin_token')
-    let hasError = false
-    // Check for missing fields
-    for (const sched of pendingSchedules.value) {
-      sched._missing = []
-      if (!sched.day) sched._missing.push('day')
-      if (!sched.start_time) sched._missing.push('start_time')
-      if (!sched.end_time) sched._missing.push('end_time')
-      if (!sched.room) sched._missing.push('room')
-      if (sched._missing.length > 0) hasError = true
-    }
-    if (hasError) {
-      notifMessage.value = 'Please fill in all schedule fields for each subject.'
-      showNotifModal.value = true
-      return
-    }
     // Debug log: what is being sent to the backend
     console.log('SENDING SCHEDULES:', JSON.stringify(pendingSchedules.value, null, 2));
     // Check for conflicts among pending schedules
@@ -1143,9 +1178,11 @@ async function saveAssignedSchedules() {
     if (!res.ok) throw new Error(data.error || 'Failed to assign subjects and schedules')
     showScheduleModal.value = false
     
-    // Close Edit Section modal if we're editing from there
-    if (showEditModal.value) {
-      showEditModal.value = false
+    // Update the edit modal's local state if we're currently editing this section
+    if (showEditModal.value && editSection.value.id === sectionId) {
+      await fetchAssignedSubjects(sectionId)
+      // Update the original state for change detection
+      originalEditSubjectIds.value = [...editSelectedSubjectIds.value]
     }
     
     notifMessage.value = 'Subjects and schedules assigned successfully!'
@@ -1183,15 +1220,140 @@ async function unassignSubjectAfterConfirm() {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed to unassign subject')
+    
+    // Store the section ID before clearing the subjectToUnassign
+    const sectionId = subjectToUnassign.value.sectionId
+    
     showUnassignConfirmModal.value = false
     subjectToUnassign.value = null
     notifMessage.value = 'Subject and its schedule have been deleted from this section.'
     showNotifModal.value = true
+    
+    // Update the edit modal's local state if we're currently editing this section
+    if (showEditModal.value && editSection.value.id === sectionId) {
+      await fetchAssignedSubjects(sectionId)
+      // Update the original state for change detection
+      originalEditSubjectIds.value = [...editSelectedSubjectIds.value]
+    }
+    
     await fetchSections()
   } catch (err) {
     notifMessage.value = err.message
     showNotifModal.value = true
   }
+}
+
+// Function to assign a single subject to section
+async function assignSingleSubject(subjectId) {
+  try {
+    const token = sessionStorage.getItem('admin_token')
+    
+    // Get subject details
+    const subjectRes = await fetch(`http://localhost:5000/api/admin/subjects/${subjectId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const subject = await subjectRes.json()
+    
+    // Prepare the subject for schedule assignment
+    pendingSchedules.value = [{
+      subject_id: subject.id,
+      code: subject.code,
+      name: subject.name,
+      type: subject.type,
+      day: '',
+      start_time: '',
+      end_time: '',
+      room: ''
+    }]
+    
+    // Store the section ID for saving
+    subjectAssignSectionId.value = editSection.value.id
+    
+    // Fetch rooms for the schedule modal
+    await fetchRooms()
+    
+    // Open schedule assignment modal
+    showScheduleModal.value = true
+    
+  } catch (err) {
+    notifMessage.value = err.message
+    showNotifModal.value = true
+  }
+}
+
+// Helper function to check if a subject is assigned
+function isSubjectAssigned(subjectId) {
+  return editSelectedSubjectIds.value.includes(subjectId)
+}
+
+// Helper function to validate time constraints based on schedule type
+function validateTimeConstraints(startTime, endTime, scheduleType) {
+  if (!startTime || !endTime) return { valid: false, message: 'Start time and end time are required.' }
+  
+  // Convert times to minutes for easier comparison
+  const timeToMinutes = (time) => {
+    const [hours, minutes] = time.split(':').map(Number)
+    return hours * 60 + minutes
+  }
+  
+  const startMinutes = timeToMinutes(startTime)
+  const endMinutes = timeToMinutes(endTime)
+  
+  // Check if end time is after start time
+  if (endMinutes <= startMinutes) {
+    return { valid: false, message: 'End time must be after start time.' }
+  }
+  
+  // Define time constraints based on schedule type
+  const morningStart = 7 * 60 // 7:00 AM
+  const morningEnd = 14 * 60 // 2:00 PM
+  const generalStart = 7 * 60 // 7:00 AM
+  const generalEnd = 22 * 60 // 10:00 PM
+  
+  if (scheduleType === 'morning') {
+    if (startMinutes < morningStart || endMinutes > morningEnd) {
+      return { 
+        valid: false, 
+        message: 'Morning schedule type can only have classes between 7:00 AM and 2:00 PM.' 
+      }
+    }
+  } else {
+    // For afternoon and evening schedule types
+    if (startMinutes < generalStart || endMinutes > generalEnd) {
+      return { 
+        valid: false, 
+        message: 'Schedule can only have classes between 7:00 AM and 10:00 PM.' 
+      }
+    }
+  }
+  
+  return { valid: true, message: '' }
+}
+
+// Helper function to check if time validation fails for a subject
+function hasTimeValidationError(subject) {
+  if (!subject.start_time || !subject.end_time) return false
+  
+  // Get the section's schedule type for validation
+  const sectionId = showEditModal.value ? editSection.value.id : subjectAssignSectionId.value
+  const section = sections.value.find(s => s.id == sectionId)
+  const scheduleType = section?.schedule_type || 'afternoon'
+  
+  const validation = validateTimeConstraints(subject.start_time, subject.end_time, scheduleType)
+  return !validation.valid
+}
+
+// Helper function to get the specific time validation error message for a subject
+function getTimeValidationErrorMessage(subject) {
+  if (!subject.start_time || !subject.end_time) return ''
+  
+  // Get the section's schedule type for validation
+  const sectionId = showEditModal.value ? editSection.value.id : subjectAssignSectionId.value
+  const section = sections.value.find(s => s.id == sectionId)
+  const scheduleType = section?.schedule_type || 'afternoon'
+  
+  const validation = validateTimeConstraints(subject.start_time, subject.end_time, scheduleType)
+  return validation.valid ? '' : validation.message
 }
 
 const rooms = ref([])
@@ -1255,6 +1417,9 @@ function cancelSaveEditSectionModal() {
 <template>
   <div class="w-full min-w-0 px-2 sm:px-6 pt-5">
     <h2 class="text-base sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Section Management</h2>
+    <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6 w-full">
+      <button @click="openAddModal" class="bg-blue-900 text-white px-4 py-2 rounded font-semibold hover:bg-blue-800 transition">Add Section</button>
+    </div>
     <div class="overflow-x-auto bg-white rounded-xl shadow-lg p-2 sm:p-6 w-full min-w-0 max-w-full">
       <table class="min-w-[600px] w-full border text-xs sm:text-sm mb-6">
         <thead class="bg-gray-100 text-gray-900">
@@ -1303,9 +1468,6 @@ function cancelSaveEditSectionModal() {
           </tr>
         </tbody>
       </table>
-      <div class="flex justify-end">
-        <button class="bg-gray-900 text-white px-6 py-2 rounded font-semibold hover:bg-gray-700 transition text-xs sm:text-sm" @click="openAddModal">Add Section</button>
-      </div>
     </div>
 
     <!-- Add Section Modal -->
@@ -1419,38 +1581,42 @@ function cancelSaveEditSectionModal() {
           </div>
         </div>
         <div class="mb-6">
-          <label class="block text-gray-700 mb-1 font-semibold">Assigned Subjects</label>
-          <div v-if="editSelectedSubjectIds.length === 0" class="text-gray-500 mb-2">No subjects assigned to this section.</div>
+          <label class="block text-gray-700 mb-1 font-semibold">All Available Subjects</label>
+          <div v-if="editSubjectOptions.length === 0" class="text-gray-500 mb-2">No subjects available for this course and year level.</div>
           <div v-else class="flex flex-col gap-2 max-h-[40vh] overflow-y-auto">
-            <div v-for="subjectId in editSelectedSubjectIds" :key="subjectId" class="flex items-center justify-between p-2 border bg-gray-100 border-black rounded">
+            <div v-for="subject in editSubjectOptions" :key="subject.id" class="flex items-center justify-between p-2 border rounded" :class="isSubjectAssigned(subject.id) ? 'bg-gray-100 border-black' : 'bg-white border-gray-300'">
               <div class="flex-1">
-                <div class="text-sm">{{ getSubjectDisplayName(subjectId) }}</div>
-                <div class="text-xs text-red-600">
-                  {{ formatCompactSchedule(getSubjectSchedule(subjectId)) }}
+                <div class="text-sm font-semibold">{{ subject.code }} - {{ subject.name }}</div>
+                <div class="text-xs text-gray-600">{{ subject.units }} units{{ subject.type ? ` (${subject.type.toUpperCase()})` : '' }}</div>
+                <div v-if="isSubjectAssigned(subject.id)" class="text-xs text-red-600">
+                  {{ formatCompactSchedule(getSubjectSchedule(subject.id)) }}
                 </div>
               </div>
               <div class="flex gap-1">
                 <button 
-                  @click="openScheduleModalForSubject(editSection.id, subjectId)"
+                  v-if="isSubjectAssigned(subject.id)"
+                  @click="openScheduleModalForSubject(editSection.id, subject.id)"
                   class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold">
                   Change Sched
                 </button>
                 <button 
-                  @click="confirmUnassignSubject(editSection.id, subjectId)"
+                  v-if="isSubjectAssigned(subject.id)"
+                  @click="confirmUnassignSubject(editSection.id, subject.id)"
                   class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold">
                   Unassign
+                </button>
+                <button 
+                  v-if="!isSubjectAssigned(subject.id)"
+                  @click="assignSingleSubject(subject.id)"
+                  class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold">
+                  Assign
                 </button>
               </div>
             </div>
           </div>
         </div>
-        <div class="flex gap-2 justify-end mt-4">
-          <button @click="closeEditModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
-          <button @click="trySaveEditSection"
-            :disabled="!editSection.name || !editSection.year_level || !editSection.course_id || !hasEditChanges()"
-            class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50">
-            Save
-          </button>
+        <div class="flex justify-end mt-4">
+          <button @click="closeEditModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Close</button>
         </div>
         <button @click="closeEditModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
@@ -1527,6 +1693,13 @@ function cancelSaveEditSectionModal() {
               <span v-if="subject.type">({{ subject.type.toUpperCase() }})</span>
             </div>
             <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-600">Room</label>
+              <select v-model="subject.room" :class="subject._missing && subject._missing.includes('room') ? 'border-red-500' : ''" class="border rounded px-2 py-1">
+                <option value="" disabled>Select Room</option>
+                <option v-for="room in rooms" :key="room.id" :value="room.name">{{ room.name }}</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
               <label class="text-xs text-gray-600">Day</label>
               <select v-model="subject.day" :class="subject._missing && subject._missing.includes('day') ? 'border-red-500' : ''" class="border rounded px-2 py-1">
                 <option value="" disabled>Select Day</option>
@@ -1540,18 +1713,16 @@ function cancelSaveEditSectionModal() {
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs text-gray-600">Start Time</label>
-              <input v-model="subject.start_time" type="time" :class="subject._missing && subject._missing.includes('start_time') ? 'border-red-500' : ''" class="border rounded px-2 py-1" />
+              <input v-model="subject.start_time" type="time" :class="(subject._missing && subject._missing.includes('start_time')) || hasTimeValidationError(subject) ? 'border-red-500' : ''" class="border rounded px-2 py-1" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs text-gray-600">End Time</label>
-              <input v-model="subject.end_time" type="time" :class="subject._missing && subject._missing.includes('end_time') ? 'border-red-500' : ''" class="border rounded px-2 py-1" />
+              <input v-model="subject.end_time" type="time" :class="(subject._missing && subject._missing.includes('end_time')) || hasTimeValidationError(subject) ? 'border-red-500' : ''" class="border rounded px-2 py-1" />
+              <div v-if="getTimeValidationErrorMessage(subject)" class="text-xs text-red-600 mt-1">
+                {{ getTimeValidationErrorMessage(subject) }}
+              </div>
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-gray-600">Room</label>
-              <select v-model="subject.room" :class="subject._missing && subject._missing.includes('room') ? 'border-red-500' : ''" class="border rounded px-2 py-1">
-                <option value="" disabled>Select Room</option>
-                <option v-for="room in rooms" :key="room.id" :value="room.name">{{ room.name }}</option>
-              </select>
               <button @click="() => { 
   if (!subject.room && !subject.day) { 
     showNotification('Please select a room and a day first.');
@@ -1563,15 +1734,13 @@ function cancelSaveEditSectionModal() {
     showRoomSchedules(subject.room, subject.day); 
   } 
 }" class="mt-1 text-xs text-blue-600 hover:underline">Show Room Schedules</button>
+              <button @click="autoGenerateSchedules" class="mt-1 text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 font-semibold">Auto Assign Schedule</button>
             </div>
           </div>
         </div>
-        <div class="flex gap-2 justify-between mt-4">
-          <button v-if="pendingSchedules.length > 1" @click="autoGenerateSchedules" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold">Auto Generate</button>
-          <div class="flex gap-2" :class="pendingSchedules.length === 1 ? 'ml-auto' : ''">
-            <button @click="handleScheduleModalCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
-            <button @click="confirmSaveSchedules" :disabled="!hasScheduleChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Save Schedules</button>
-          </div>
+        <div class="flex gap-2 justify-end mt-4">
+          <button @click="handleScheduleModalCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
+          <button @click="confirmSaveSchedules" :disabled="!hasScheduleChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Save Schedules</button>
         </div>
         <button @click="handleScheduleModalCancel" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
