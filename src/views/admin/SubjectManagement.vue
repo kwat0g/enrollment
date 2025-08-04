@@ -18,7 +18,7 @@ const notifMessage = ref('')
 const confirmMessage = ref('')
 const confirmCallback = ref(null)
 // Add course and year level to newSubject
-const newSubject = ref({ code: '', name: '', instructor_name: '', units: '', type: '', course_id: '', year_level: '' })
+const newSubject = ref({ code: '', name: '', units: '', type: '', course_id: '', year_level: '' })
 const isEditMode = ref(false)
 const editingSubjectId = ref(null)
 const validationError = ref('')
@@ -63,7 +63,7 @@ function openAddModal() {
   isEditMode.value = false
   editingSubjectId.value = null
   validationError.value = ''
-  newSubject.value = { code: '', name: '', instructor_name: '', units: '', type: '', course_id: selectedCourse.value, year_level: selectedYear.value }
+  newSubject.value = { code: '', name: '', units: '', type: '', course_id: selectedCourse.value, year_level: selectedYear.value }
   showAddModal.value = true
 }
 
@@ -129,7 +129,6 @@ async function openEditModal(subject) {
     newSubject.value = {
       code: subjectData.code,
       name: subjectData.name,
-      instructor_name: subjectData.instructor || '',
       units: subjectData.units,
       course_id: subjectData.course_id,
       year_level: subjectData.year_level,
@@ -145,7 +144,6 @@ async function openEditModal(subject) {
     originalSubjectData.value = {
       code: subjectData.code,
       name: subjectData.name,
-      instructor_name: subjectData.instructor || '',
       units: subjectData.units,
       course_id: subjectData.course_id,
       year_level: subjectData.year_level,
@@ -177,11 +175,7 @@ async function saveSubject() {
     return;
   }
 
-  // Instructor Name validation (required)
-  if (!newSubject.value.instructor_name || !newSubject.value.instructor_name.toString().trim()) {
-    validationError.value = 'Instructor name is required.';
-    return;
-  }
+
   
   try {
     const token = sessionStorage.getItem('admin_token')
@@ -191,8 +185,7 @@ async function saveSubject() {
       const subjectData = {
         code: newSubject.value.code,
         name: newSubject.value.name,
-        units: newSubject.value.units,
-        instructor: newSubject.value.instructor_name
+        units: newSubject.value.units
       };
       
       // Update existing subject
@@ -230,9 +223,7 @@ async function saveSubject() {
       showNotifModal.value = true;
     } else {
       // Add new subject
-      // Map instructor_name to instructor for backend
-      const subjectPayload = { ...newSubject.value, instructor: newSubject.value.instructor_name };
-      delete subjectPayload.instructor_name;
+      const subjectPayload = { ...newSubject.value };
       const res = await fetch('http://localhost:5000/api/admin/subjects', {
         method: 'POST',
         headers: {
@@ -318,7 +309,6 @@ function hasChanges() {
   return (
     current.code !== original.code ||
     current.name !== original.name ||
-    current.instructor_name !== original.instructor_name ||
     current.units !== original.units ||
     current.course_id !== original.course_id ||
     current.year_level !== original.year_level ||
@@ -431,10 +421,7 @@ watch([selectedCourse, selectedYear], fetchSubjects)
                 <option value="Lab">Laboratory</option>
               </select>
             </div>
-            <div class="col-span-2">
-              <label class="block text-gray-700 mb-1 font-semibold">Instructor Name</label>
-              <input v-model="newSubject.instructor_name" placeholder="Instructor Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            </div>
+
           </div>
           <div class="flex gap-2 justify-end mt-4">
             <button @click="closeAddModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>

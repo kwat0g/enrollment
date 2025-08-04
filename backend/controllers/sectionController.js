@@ -130,10 +130,31 @@ const getSectionSchedules = async (req, res) => {
   const sectionId = req.params.sectionId;
   try {
     const [scheduleRows] = await db.query(
-      'SELECT * FROM schedules WHERE section_id = ?',
+      `SELECT sc.*, sub.code as subject_code, sub.name as subject_name, sub.units, r.name as room_name
+       FROM schedules sc
+       JOIN subjects sub ON sc.subject_id = sub.id
+       LEFT JOIN rooms r ON sc.room_id = r.id
+       WHERE sc.section_id = ?`,
       [sectionId]
     );
     res.json(scheduleRows);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
+// --- Admin: Get enrollments for a section ---
+const getSectionEnrollments = async (req, res) => {
+  const sectionId = req.params.sectionId;
+  try {
+    const [enrollmentRows] = await db.query(
+      `SELECT e.*, s.student_id, s.last_name, s.first_name
+       FROM enrollments e
+       JOIN students s ON e.student_id = s.id
+       WHERE e.section_id = ? AND e.status IN ('pending', 'approved')`,
+      [sectionId]
+    );
+    res.json(enrollmentRows);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
   }
@@ -146,5 +167,6 @@ module.exports = {
   deleteSection,
   getSectionStatus,
   updateSectionStatus,
-  getSectionSchedules
+  getSectionSchedules,
+  getSectionEnrollments
 };

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { cloneDeep } from 'lodash'
 const showScheduleModal = ref(false)
 const pendingSchedules = ref([])
 
@@ -105,23 +106,29 @@ async function openScheduleModalForSubject(sectionId, subjectId) {
       code: subjectData.code,
       name: subjectData.name,
       type: subjectData.type,
-      day: scheduleData?.day || '',
-      start_time: scheduleData?.start_time || '',
-      end_time: scheduleData?.end_time || '',
-      room: roomName,
-      schedule_id: scheduleData?.id || ''
+      day: scheduleData?.day || null,
+      start_time: scheduleData?.start_time || null,
+      end_time: scheduleData?.end_time || null,
+      room: roomName || null,
+      instructor: scheduleData?.instructor || null,
+      schedule_id: scheduleData?.id || null
     }
     
     pendingSchedules.value = [scheduleItem]
     
-    // Store original data for change detection
-    originalPendingSchedules.value = [JSON.parse(JSON.stringify(scheduleItem))]
+    // Store original data for change detection immediately
+    originalPendingSchedules.value = cloneDeep([scheduleItem])
     
     // Store the section ID for saving
     subjectAssignSectionId.value = sectionId
     
     // Show the existing schedule assignment modal
     showScheduleModal.value = true
+
+    // Wait for Vue to render the modal and update the original state if needed
+    await nextTick()
+    // Re-sync the original state after Vue has processed the reactive changes
+    originalPendingSchedules.value = cloneDeep(pendingSchedules.value)
   } catch (err) {
     notifMessage.value = err.message
     showNotifModal.value = true
@@ -138,7 +145,12 @@ function handleScheduleModalCancel() {
 }
 
 // Function to confirm closing modal with unsaved changes
+function resetPendingSchedules() {
+  pendingSchedules.value = cloneDeep(originalPendingSchedules.value)
+}
+
 function confirmCloseScheduleModal() {
+  resetPendingSchedules() // Reset the state
   showUnsavedScheduleChangesModal.value = false
   showScheduleModal.value = false
 }
@@ -161,10 +173,10 @@ function hasScheduleChanges() {
     if (!original) return true
     
     // Compare the key schedule fields
-    if (current.day !== original.day ||
-        current.start_time !== original.start_time ||
-        current.end_time !== original.end_time ||
-        current.room !== original.room) {
+    if ((current.day || '') !== (original.day || '') ||
+        (current.start_time || '') !== (original.start_time || '') ||
+        (current.end_time || '') !== (original.end_time || '') ||
+        (current.room || '') !== (original.room || '')) {
       return true
     }
   }
@@ -233,8 +245,7 @@ async function fetchSections() {
     sections.value = data
   } catch (err) {
     error.value = err.message
-    showNotification(err.message)
-    showNotifModal.value = true
+    notifMessage.value = err.message
   } finally {
     loading.value = false
   }
@@ -250,7 +261,8 @@ async function fetchCourses() {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch courses')
     courses.value = data
   } catch (err) {
-    showNotification(err.message)
+    notifMessage.value = err.message;
+    showNotifModal.value = true;
   }
 }
 
@@ -289,16 +301,16 @@ function updateSectionName() {
   // Generate section type options based on year and semester
   const semester = '1' // Default to 1st semester, can be made dynamic
   sectionTypeOptions.value = [
-    { value: `${semester}M1`, label: `${yearNumber}${semester}M1 (Morning 1)` },
-    { value: `${semester}M2`, label: `${yearNumber}${semester}M2 (Morning 2)` },
-    { value: `${semester}M3`, label: `${yearNumber}${semester}M3 (Morning 3)` },
-    { value: `${semester}M4`, label: `${yearNumber}${semester}M4 (Morning 4)` },
-    { value: `${semester}A1`, label: `${yearNumber}${semester}A1 (Afternoon 1)` },
-    { value: `${semester}A2`, label: `${yearNumber}${semester}A2 (Afternoon 2)` },
-    { value: `${semester}A3`, label: `${yearNumber}${semester}A3 (Afternoon 3)` },
-    { value: `${semester}A4`, label: `${yearNumber}${semester}A4 (Afternoon 4)` },
-    { value: `${semester}E1`, label: `${yearNumber}${semester}E1 (Evening 1)` },
-    { value: `${semester}E2`, label: `${yearNumber}${semester}E2 (Evening 2)` }
+    { value: `${semester}M1`, label: `${yearNumber}${semester}M1` },
+    { value: `${semester}M2`, label: `${yearNumber}${semester}M2` },
+    { value: `${semester}M3`, label: `${yearNumber}${semester}M3` },
+    { value: `${semester}M4`, label: `${yearNumber}${semester}M4` },
+    { value: `${semester}A1`, label: `${yearNumber}${semester}A1` },
+    { value: `${semester}A2`, label: `${yearNumber}${semester}A2` },
+    { value: `${semester}A3`, label: `${yearNumber}${semester}A3` },
+    { value: `${semester}A4`, label: `${yearNumber}${semester}A4` },
+    { value: `${semester}E1`, label: `${yearNumber}${semester}E1` },
+    { value: `${semester}E2`, label: `${yearNumber}${semester}E2` }
   ]
   
   // Reset section type selection
@@ -525,7 +537,8 @@ async function fetchSubjectsForSection(courseId, yearLevel) {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch subjects')
     subjectOptions.value = data
   } catch (err) {
-    showNotification(err.message)
+    notifMessage.value = err.message;
+    showNotifModal.value = true;
   }
 }
 
@@ -556,7 +569,8 @@ async function getCurrentSchedulesForSection(sectionId, subjectIds) {
       day: subject.schedule?.day || '',
       start_time: subject.schedule?.start_time || '',
       end_time: subject.schedule?.end_time || '',
-      room: subject.room || ''
+      room: subject.room || '',
+      instructor: subject.schedule?.instructor || 'N/A'
     });
   }
   return schedules;
@@ -565,8 +579,20 @@ async function getCurrentSchedulesForSection(sectionId, subjectIds) {
 // Enhanced: Prepare subjects for schedule assignment (defer DB insertion until schedules are set)
 async function assignSubjectsToSection() {
   if (selectedSubjectIds.value.length === 0) {
-    showNotification('Please select at least one subject to assign.')
+    notifMessage.value = 'Please select at least one subject to assign.';
+    showNotifModal.value = true;
     return
+  }
+  
+  // Check if section is open (for new section creation)
+  const sectionId = subjectAssignSectionId.value
+  if (sectionId) {
+    const section = sections.value.find(s => s.id == sectionId)
+    if (section && section.status === 'open') {
+      notifMessage.value = 'Cannot assign subjects: section is currently open for enrollment. Please close the section first.';
+      showNotifModal.value = true;
+      return
+    }
   }
   
   // Show loading state
@@ -602,7 +628,8 @@ async function assignSubjectsToSection() {
       day: '',
       start_time: '',
       end_time: '',
-      room: ''
+      room: '',
+      instructor: ''
     }))
     
     // Fetch rooms for the schedule modal
@@ -655,10 +682,12 @@ async function toggleSectionStatus(section) {
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to update section status')
-        showNotification('Section status updated.')
+        notifMessage.value = 'Section status updated.';
+        showNotifModal.value = true;
         await fetchSections()
       } catch (err) {
-        showNotification(err.message)
+        notifMessage.value = err.message;
+        showNotifModal.value = true;
       }
     }
   )
@@ -672,6 +701,9 @@ async function openEditModal(section) {
   await fetchEditSubjects(section.course_id, section.year_level)
   await fetchAssignedSubjects(section.id)
   
+  // Fetch enrollments for this section
+  await fetchSectionEnrollments(section.id)
+  
   // Ensure rooms are loaded for proper room name display
   if (rooms.value.length === 0) {
     await fetchRooms()
@@ -681,6 +713,21 @@ async function openEditModal(section) {
   originalEditSection.value = { ...section, schedule_type: section.schedule_type || '' }
   originalEditSubjectIds.value = [...editSelectedSubjectIds.value]
   showEditModal.value = true
+}
+
+// Function to fetch section enrollments
+async function fetchSectionEnrollments(sectionId) {
+  try {
+    const token = sessionStorage.getItem('admin_token')
+    const res = await fetch(`http://localhost:5000/api/admin/sections/${sectionId}/enrollments`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    sectionEnrollments.value = data
+  } catch (err) {
+    console.error('Error fetching section enrollments:', err)
+    sectionEnrollments.value = []
+  }
 }
 
 // Fetch subjects for edit modal
@@ -694,7 +741,8 @@ async function fetchEditSubjects(courseId, yearLevel) {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch subjects')
     editSubjectOptions.value = data
   } catch (err) {
-    showNotification(err.message)
+    notifMessage.value = err.message;
+    showNotifModal.value = true;
   }
 }
 // Fetch assigned subjects with schedules for section
@@ -711,7 +759,8 @@ async function fetchAssignedSubjects(sectionId) {
     editSubjectSchedules.value = data
     editSelectedSubjectIds.value = data.map(s => s.subject_id)
   } catch (err) {
-    showNotification(err.message)
+    notifMessage.value = err.message;
+    showNotifModal.value = true;
   }
 }
 // Refactor saveEditSection to ensure the schedule modal is always shown for new subjects and backend is only called after modal is completed
@@ -752,7 +801,8 @@ async function saveEditSection() {
           day: '',
           start_time: '',
           end_time: '',
-          room: ''
+          room: '',
+          instructor: ''
         });
       }
       pendingSchedules.value = assignedSubjects;
@@ -767,7 +817,8 @@ async function saveEditSection() {
     // If no new subjects, proceed to backend call
     await saveSectionAndSubjects();
   } catch (err) {
-    showNotification(err.message || 'Failed to update section or subjects.');
+    notifMessage.value = err.message || 'Failed to update section or subjects.';
+    showNotifModal.value = true;;
     return;
   }
 }
@@ -799,7 +850,8 @@ async function saveSectionAndSubjects() {
     if (!res2.ok) throw new Error(data2.error || 'Failed to update subjects');
   }
   showEditModal.value = false;
-  showNotification('Section updated successfully!');
+  notifMessage.value = 'Section updated successfully!';
+  showNotifModal.value = true;;
   await fetchSections();
 }
 
@@ -840,6 +892,14 @@ function confirmSaveSchedules() {
   if (hasError) {
     notifMessage.value = 'Please fill in all schedule fields for each subject.'
     showNotifModal.value = true
+    return
+  }
+  
+  // Check for empty instructor names
+  const schedulesWithEmptyInstructor = pendingSchedules.value.filter(sched => !sched.instructor || sched.instructor.trim() === '')
+  if (schedulesWithEmptyInstructor.length > 0) {
+    pendingSchedulesWithEmptyInstructor.value = [...pendingSchedules.value]
+    showInstructorWarningModal.value = true
     return
   }
   
@@ -928,10 +988,12 @@ async function deleteSection(sectionId) {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed to delete section')
-    showNotification('Section deleted.')
+    notifMessage.value = 'Section deleted.';
+    showNotifModal.value = true;
     await fetchSections()
   } catch (err) {
-    showNotification(err.message)
+    notifMessage.value = err.message;
+    showNotifModal.value = true;
   }
 }
 
@@ -956,17 +1018,6 @@ async function deleteSection(sectionId) {
 // }
 
 const mobileDropdownOpen = ref(null)
-
-// Utility: show notification and close all modals that could overlap
-function showNotification(message) {
-  notifMessage.value = message
-  showNotifModal.value = true
-  showEditModal.value = false
-  showAddModal.value = false
-  showSubjectModal.value = false
-  showConfirmModal.value = false
-  showUnsavedModal.value = false
-}
 
 // Add state for room schedules modal
 const showRoomSchedulesModal = ref(false)
@@ -1009,15 +1060,22 @@ function timesOverlap(start1, end1, start2, end2) {
 
 async function autoGenerateSchedules() {
   try {
-    // Available time slots (7 AM to 10 PM)
-    const timeSlots = [
+    // Get current section info to determine schedule type
+    const currentSection = sections.value.find(s => s.id == subjectAssignSectionId.value)
+    const sectionScheduleType = currentSection?.schedule_type || 'afternoon'
+    
+    // Define time slots with priority based on section type
+    const morningSlots = [
       { start: '07:00', end: '08:00' }, // 7 AM
       { start: '08:00', end: '09:00' }, // 8 AM
       { start: '09:00', end: '10:00' }, // 9 AM
       { start: '10:00', end: '11:00' }, // 10 AM
       { start: '11:00', end: '12:00' }, // 11 AM
       { start: '12:00', end: '13:00' }, // 12 PM
-      { start: '13:00', end: '14:00' }, // 1 PM
+      { start: '13:00', end: '14:00' }  // 1 PM
+    ]
+    
+    const afternoonSlots = [
       { start: '14:00', end: '15:00' }, // 2 PM
       { start: '15:00', end: '16:00' }, // 3 PM
       { start: '16:00', end: '17:00' }, // 4 PM
@@ -1027,6 +1085,16 @@ async function autoGenerateSchedules() {
       { start: '20:00', end: '21:00' }, // 8 PM
       { start: '21:00', end: '22:00' }  // 9 PM
     ]
+    
+    // Prioritize time slots based on section type
+    let prioritizedTimeSlots
+    if (sectionScheduleType === 'morning') {
+      // Morning sections get priority for morning slots, then afternoon as fallback
+      prioritizedTimeSlots = [...morningSlots, ...afternoonSlots]
+    } else {
+      // Non-morning sections start from afternoon slots
+      prioritizedTimeSlots = [...afternoonSlots, ...morningSlots]
+    }
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const token = sessionStorage.getItem('adminToken')
@@ -1083,7 +1151,7 @@ async function autoGenerateSchedules() {
         for (const room of rooms.value) {
           if (assigned) break
           
-          for (const timeSlot of timeSlots) {
+          for (const timeSlot of prioritizedTimeSlots) {
             if (!hasConflict(room.name, day, timeSlot.start, timeSlot.end)) {
               // Found an available slot!
               subject.day = day
@@ -1171,7 +1239,11 @@ async function saveAssignedSchedules() {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         subjectIds: pendingSchedules.value.map(s => s.subject_id),
-        schedules: pendingSchedules.value
+        schedules: pendingSchedules.value,
+        instructors: pendingSchedules.value.reduce((acc, s) => {
+          acc[s.subject_id] = s.instructor || '';
+          return acc;
+        }, {})
       })
     })
     const data = await res.json()
@@ -1203,6 +1275,14 @@ async function saveAssignedSchedules() {
 const showUnassignConfirmModal = ref(false)
 const subjectToUnassign = ref(null)
 
+// Add state for instructor warning modal
+const showInstructorWarningModal = ref(false)
+const pendingSchedulesWithEmptyInstructor = ref([])
+
+// Add state for section enrollments
+const sectionEnrollments = ref([])
+
+
 // Function to trigger the confirm modal
 function confirmUnassignSubject(sectionId, subjectId) {
   subjectToUnassign.value = { sectionId, subjectId }
@@ -1213,13 +1293,41 @@ function confirmUnassignSubject(sectionId, subjectId) {
 async function unassignSubjectAfterConfirm() {
   if (!subjectToUnassign.value) return
   try {
+    // Check if section is open and has enrollments
+    const section = sections.value.find(s => s.id == subjectToUnassign.value.sectionId)
+    if (section && section.status === 'open') {
+      const token = sessionStorage.getItem('admin_token')
+      const enrollmentRes = await fetch(`http://localhost:5000/api/admin/sections/${subjectToUnassign.value.sectionId}/enrollments`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const enrollments = await enrollmentRes.json()
+      
+      if (enrollments.length > 0) {
+        showUnassignConfirmModal.value = false
+        subjectToUnassign.value = null
+        notifMessage.value = 'Cannot unassign subjects: section has enrolled or pending students. You can only modify existing subject schedules.'
+        showNotifModal.value = true
+        return
+      }
+    }
+    
     const token = sessionStorage.getItem('admin_token')
     const res = await fetch(`http://localhost:5000/api/admin/sections/${subjectToUnassign.value.sectionId}/subjects/${subjectToUnassign.value.subjectId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to unassign subject')
+    if (!res.ok) {
+      // If the error is about section being open, close the confirmation modal and show error
+      if (data.error && data.error.includes('section is currently open')) {
+        showUnassignConfirmModal.value = false
+        subjectToUnassign.value = null
+        notifMessage.value = data.error
+        showNotifModal.value = true
+        return
+      }
+      throw new Error(data.error || 'Failed to unassign subject')
+    }
     
     // Store the section ID before clearing the subjectToUnassign
     const sectionId = subjectToUnassign.value.sectionId
@@ -1246,6 +1354,22 @@ async function unassignSubjectAfterConfirm() {
 // Function to assign a single subject to section
 async function assignSingleSubject(subjectId) {
   try {
+    // Check if section is open and has enrollments
+    if (editSection.value.status === 'open') {
+      // Check for enrollments
+      const token = sessionStorage.getItem('admin_token')
+      const enrollmentRes = await fetch(`http://localhost:5000/api/admin/sections/${editSection.value.id}/enrollments`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const enrollments = await enrollmentRes.json()
+      
+      if (enrollments.length > 0) {
+        notifMessage.value = 'Cannot assign subjects: section has enrolled or pending students. You can only modify existing subject schedules.'
+        showNotifModal.value = true
+        return
+      }
+    }
+    
     const token = sessionStorage.getItem('admin_token')
     
     // Get subject details
@@ -1255,16 +1379,19 @@ async function assignSingleSubject(subjectId) {
     const subject = await subjectRes.json()
     
     // Prepare the subject for schedule assignment
-    pendingSchedules.value = [{
+    const scheduleItem = {
       subject_id: subject.id,
       code: subject.code,
       name: subject.name,
       type: subject.type,
-      day: '',
-      start_time: '',
-      end_time: '',
-      room: ''
-    }]
+      day: null,
+      start_time: null,
+      end_time: null,
+      room: null,
+      instructor: null
+    }
+    
+    pendingSchedules.value = [scheduleItem]
     
     // Store the section ID for saving
     subjectAssignSectionId.value = editSection.value.id
@@ -1275,15 +1402,120 @@ async function assignSingleSubject(subjectId) {
     // Open schedule assignment modal
     showScheduleModal.value = true
     
+    // Wait for Vue to render the modal and initialize originalPendingSchedules
+    await nextTick()
+    originalPendingSchedules.value = cloneDeep(pendingSchedules.value)
+    
   } catch (err) {
     notifMessage.value = err.message
     showNotifModal.value = true
   }
 }
 
+// Bulk assignment state
+const bulkSelectedSubjects = ref([])
+const showBulkAssignMode = ref(false)
+
 // Helper function to check if a subject is assigned
 function isSubjectAssigned(subjectId) {
   return editSelectedSubjectIds.value.includes(subjectId)
+}
+
+// Toggle bulk assignment mode
+function toggleBulkAssignMode() {
+  showBulkAssignMode.value = !showBulkAssignMode.value
+  if (!showBulkAssignMode.value) {
+    bulkSelectedSubjects.value = []
+  }
+}
+
+// Toggle subject selection for bulk assignment
+function toggleBulkSubjectSelection(subjectId) {
+  const index = bulkSelectedSubjects.value.indexOf(subjectId)
+  if (index > -1) {
+    bulkSelectedSubjects.value.splice(index, 1)
+  } else {
+    bulkSelectedSubjects.value.push(subjectId)
+  }
+}
+
+// Check if subject is selected for bulk assignment
+function isBulkSelected(subjectId) {
+  return bulkSelectedSubjects.value.includes(subjectId)
+}
+
+// Bulk assign selected subjects
+async function bulkAssignSubjects() {
+  if (bulkSelectedSubjects.value.length === 0) {
+    notifMessage.value = 'Please select at least one subject to assign.';
+    showNotifModal.value = true;
+    return
+  }
+
+  try {
+    // Check if section is open and has enrollments
+    if (editSection.value.status === 'open') {
+      const token = sessionStorage.getItem('admin_token')
+      const enrollmentRes = await fetch(`http://localhost:5000/api/admin/sections/${editSection.value.id}/enrollments`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const enrollments = await enrollmentRes.json()
+      
+      if (enrollments.length > 0) {
+        notifMessage.value = 'Cannot assign subjects: section has enrolled or pending students. You can only modify existing subject schedules.';
+        showNotifModal.value = true;
+        return
+      }
+    }
+
+    const token = sessionStorage.getItem('admin_token')
+    
+    // Get subject details for all selected subjects
+    const subjectPromises = bulkSelectedSubjects.value.map(async (subjectId) => {
+      const subjectRes = await fetch(`http://localhost:5000/api/admin/subjects/${subjectId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      return await subjectRes.json()
+    })
+    
+    const subjects = await Promise.all(subjectPromises)
+    
+    // Prepare all subjects for schedule assignment
+    const scheduleItems = subjects.map(subject => ({
+      subject_id: subject.id,
+      code: subject.code,
+      name: subject.name,
+      type: subject.type,
+      day: null,
+      start_time: null,
+      end_time: null,
+      room: null,
+      instructor: null
+    }))
+    
+    pendingSchedules.value = scheduleItems
+    
+    // Store the section ID for saving
+    subjectAssignSectionId.value = editSection.value.id
+    
+    // Fetch rooms for the schedule modal
+    await fetchRooms()
+    
+    // Open schedule assignment modal
+    showScheduleModal.value = true
+    
+    // Wait for Vue to render the modal and initialize originalPendingSchedules
+    await nextTick()
+    originalPendingSchedules.value = cloneDeep(pendingSchedules.value)
+    
+    // Reset bulk selection
+    bulkSelectedSubjects.value = []
+    showBulkAssignMode.value = false
+    
+  } catch (err) {
+    notifMessage.value = err.message || 'Failed to prepare bulk assignment';
+    showNotifModal.value = true;
+  }
 }
 
 // Helper function to validate time constraints based on schedule type
@@ -1367,7 +1599,8 @@ async function fetchRooms() {
     const data = await res.json()
     rooms.value = data
   } catch (err) {
-    showNotification('Failed to fetch rooms.')
+    notifMessage.value = 'Failed to fetch rooms.';
+    showNotifModal.value = true;
   }
 }
 
@@ -1410,6 +1643,31 @@ function confirmSaveEditSectionModal() {
 
 function cancelSaveEditSectionModal() {
   showSaveConfirmModal.value = false
+}
+
+// Instructor warning modal functions
+function cancelInstructorWarning() {
+  showInstructorWarningModal.value = false
+  pendingSchedulesWithEmptyInstructor.value = []
+}
+
+function confirmInstructorWarning() {
+  // Set empty instructor names to "N/A"
+  for (const sched of pendingSchedulesWithEmptyInstructor.value) {
+    if (!sched.instructor || sched.instructor.trim() === '') {
+      sched.instructor = 'N/A'
+    }
+  }
+  
+  // Update the main pendingSchedules with the modified data
+  pendingSchedules.value = [...pendingSchedulesWithEmptyInstructor.value]
+  
+  // Close the warning modal
+  showInstructorWarningModal.value = false
+  pendingSchedulesWithEmptyInstructor.value = []
+  
+  // Proceed directly to saving schedules without showing the confirmation modal
+  saveAssignedSchedules()
 }
 
 </script>
@@ -1554,70 +1812,106 @@ function cancelSaveEditSectionModal() {
 
     <!-- Edit Section Modal -->
     <div v-if="showEditModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-auto">
-      <div class="bg-white p-8 rounded-lg shadow-2xl border border-gray-200 w-full max-w-md pointer-events-auto relative">
+      <div class="bg-white p-6 rounded-lg shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[90vh] pointer-events-auto relative">
         <h3 class="text-xl font-bold mb-6 text-blue-900">Edit Section</h3>
         
-        <!-- Section Name (Read-only) -->
-        <div class="mb-4">
-          <label class="block text-gray-700 mb-1 font-semibold">Section Name</label>
-          <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-700 font-semibold">
-            {{ editSection.name }}
-          </div>
-        </div>
-        
-        <!-- Course (Read-only) -->
-        <div class="mb-4">
-          <label class="block text-gray-700 mb-1 font-semibold">Course</label>
-          <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-600">
-            {{ getCourseDisplayName(editSection.course_id) }}
-          </div>
-        </div>
-        
-        <!-- Year Level (Read-only) -->
-        <div class="mb-4">
-          <label class="block text-gray-700 mb-1 font-semibold">Year Level</label>
-          <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-600">
-            {{ getYearLevelDisplayName(editSection.year_level) }}
-          </div>
-        </div>
-        <div class="mb-6">
-          <label class="block text-gray-700 mb-1 font-semibold">All Available Subjects</label>
-          <div v-if="editSubjectOptions.length === 0" class="text-gray-500 mb-2">No subjects available for this course and year level.</div>
-          <div v-else class="flex flex-col gap-2 max-h-[40vh] overflow-y-auto">
-            <div v-for="subject in editSubjectOptions" :key="subject.id" class="flex items-center justify-between p-2 border rounded" :class="isSubjectAssigned(subject.id) ? 'bg-gray-100 border-black' : 'bg-white border-gray-300'">
-              <div class="flex-1">
-                <div class="text-sm font-semibold">{{ subject.code }} - {{ subject.name }}</div>
-                <div class="text-xs text-gray-600">{{ subject.units }} units{{ subject.type ? ` (${subject.type.toUpperCase()})` : '' }}</div>
-                <div v-if="isSubjectAssigned(subject.id)" class="text-xs text-red-600">
-                  {{ formatCompactSchedule(getSubjectSchedule(subject.id)) }}
-                </div>
+        <div class="flex gap-6 h-full">
+          <!-- Left Side - Section Info -->
+          <div class="w-1/3 flex flex-col">
+            <h4 class="text-lg font-bold text-gray-900 mb-4">Information</h4>
+            <div class="mb-4">
+              <label class="block text-gray-700 mb-1 font-semibold">Section Name</label>
+              <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-700 font-semibold">
+                {{ editSection.name }}
               </div>
-              <div class="flex gap-1">
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-gray-700 mb-1 font-semibold">Course</label>
+              <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-600">
+                {{ getCourseDisplayName(editSection.course_id) }}
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-gray-700 mb-1 font-semibold">Year Level</label>
+              <div class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-600">
+                {{ getYearLevelDisplayName(editSection.year_level) }}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right Side - Available Subjects -->
+          <div class="w-2/3 flex flex-col">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-gray-700 font-bold text-lg">All Available Subjects</label>
+              <div class="flex gap-2">
                 <button 
-                  v-if="isSubjectAssigned(subject.id)"
-                  @click="openScheduleModalForSubject(editSection.id, subject.id)"
-                  class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold">
-                  Change Sched
+                  @click="toggleBulkAssignMode"
+                  :class="showBulkAssignMode ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'"
+                  class="px-3 py-1 text-white rounded text-sm font-semibold transition">
+                  {{ showBulkAssignMode ? 'Cancel Bulk' : 'Bulk Assign' }}
                 </button>
                 <button 
-                  v-if="isSubjectAssigned(subject.id)"
-                  @click="confirmUnassignSubject(editSection.id, subject.id)"
-                  class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold">
-                  Unassign
+                  v-if="showBulkAssignMode && bulkSelectedSubjects.length > 0"
+                  @click="bulkAssignSubjects"
+                  :disabled="editSection.status === 'open'"
+                  :class="editSection.status === 'open' ? 'px-3 py-1 bg-gray-400 text-gray-600 rounded text-sm cursor-not-allowed' : 'px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 font-semibold transition'"
+                  class="">
+                  Assign {{ bulkSelectedSubjects.length }} Subject{{ bulkSelectedSubjects.length > 1 ? 's' : '' }}
                 </button>
-                <button 
-                  v-if="!isSubjectAssigned(subject.id)"
-                  @click="assignSingleSubject(subject.id)"
-                  class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold">
-                  Assign
-                </button>
+              </div>
+            </div>
+            <div v-if="editSubjectOptions.length === 0" class="text-gray-500 mb-2">No subjects available for this course and year level.</div>
+            <div v-else class="flex flex-col gap-2 overflow-y-auto h-[280px] pr-2 bg-gray-50 border border-gray-200 rounded p-4">
+              <div v-for="subject in editSubjectOptions" :key="subject.id" class="flex items-center justify-between p-3 border rounded" :class="[
+                isSubjectAssigned(subject.id) ? 'bg-gray-100 border-black' : 'bg-white border-gray-300',
+                showBulkAssignMode && !isSubjectAssigned(subject.id) && isBulkSelected(subject.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+              ]">
+                <div class="flex items-center gap-2 flex-1">
+                  <!-- Bulk selection checkbox -->
+                  <input 
+                    v-if="showBulkAssignMode && !isSubjectAssigned(subject.id)"
+                    type="checkbox"
+                    :checked="isBulkSelected(subject.id)"
+                    @change="toggleBulkSubjectSelection(subject.id)"
+                    class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div class="flex-1">
+                    <div class="text-sm font-semibold">{{ subject.code }} - {{ subject.name }}</div>
+                    <div class="text-xs text-gray-600">{{ subject.units }} units{{ subject.type ? ` (${subject.type.toUpperCase()})` : '' }}</div>
+                    <div v-if="isSubjectAssigned(subject.id)" class="text-xs text-red-600 mt-1">
+                      {{ formatCompactSchedule(getSubjectSchedule(subject.id)) }}
+                    </div>
+                  </div>
+                </div>
+                <div class="flex gap-1 ml-2" v-if="!showBulkAssignMode">
+                  <button 
+                    v-if="isSubjectAssigned(subject.id)"
+                    @click="openScheduleModalForSubject(editSection.id, subject.id)"
+                    class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold">
+                    Change Sched
+                  </button>
+                  <button 
+                    v-if="isSubjectAssigned(subject.id)"
+                    @click="confirmUnassignSubject(editSection.id, subject.id)"
+                    :disabled="editSection.status === 'open'"
+                    :class="editSection.status === 'open' ? 'px-2 py-1 bg-gray-400 text-gray-600 rounded text-xs cursor-not-allowed' : 'px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold'">
+                    {{ editSection.status === 'open' ? 'Section Open' : 'Unassign' }}
+                  </button>
+                  <button 
+                    v-if="!isSubjectAssigned(subject.id)"
+                    @click="assignSingleSubject(subject.id)"
+                    :disabled="editSection.status === 'open'"
+                    :class="editSection.status === 'open' ? 'px-2 py-1 bg-gray-400 text-gray-600 rounded text-xs cursor-not-allowed' : 'px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold'">
+                    {{ editSection.status === 'open' ? 'Section Open' : 'Assign' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="flex justify-end mt-4">
-          <button @click="closeEditModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Close</button>
-        </div>
+        
         <button @click="closeEditModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
@@ -1723,6 +2017,10 @@ function cancelSaveEditSectionModal() {
               </div>
             </div>
             <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-600">Instructor</label>
+              <input v-model="subject.instructor" placeholder="Instructor Name" class="border rounded px-2 py-1" />
+            </div>
+            <div class="flex flex-col gap-1">
               <button @click="() => { 
   if (!subject.room && !subject.day) { 
     showNotification('Please select a room and a day first.');
@@ -1734,20 +2032,22 @@ function cancelSaveEditSectionModal() {
     showRoomSchedules(subject.room, subject.day); 
   } 
 }" class="mt-1 text-xs text-blue-600 hover:underline">Show Room Schedules</button>
-              <button @click="autoGenerateSchedules" class="mt-1 text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 font-semibold">Auto Assign Schedule</button>
             </div>
           </div>
         </div>
-        <div class="flex gap-2 justify-end mt-4">
-          <button @click="handleScheduleModalCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
-          <button @click="confirmSaveSchedules" :disabled="!hasScheduleChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Save Schedules</button>
+        <div class="flex justify-between items-center mt-4">
+          <button @click="autoGenerateSchedules" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold">Auto</button>
+          <div class="flex gap-2">
+            <button @click="handleScheduleModalCancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>
+            <button @click="confirmSaveSchedules" :disabled="!hasScheduleChanges()" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Save Schedules</button>
+          </div>
         </div>
         <button @click="handleScheduleModalCancel" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
 
     <!-- Confirm Unassign Modal -->
-    <div v-if="showUnassignConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-auto">
+    <div v-if="showUnassignConfirmModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-[70] pointer-events-auto">
       <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-red-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
         <svg class="w-10 h-10 text-red-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <div class="mb-4 text-gray-800 text-base font-semibold">Are you sure you want to unassign this subject? This will <span class='text-red-600 font-bold'>delete its schedule</span> from this section.</div>
@@ -1782,12 +2082,12 @@ function cancelSaveEditSectionModal() {
     </div>
   </div>
   <!-- Notification Modal (moved outside main container for highest z-index) -->
-  <div v-if="showNotifModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+  <div v-if="showNotifModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-[80] pointer-events-auto">
     <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
       <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <div class="mb-4 text-gray-800 text-base font-semibold">{{ notifMessage }}</div>
-      <button @click="showNotifModal = false" class="px-5 py-2 bg-yellow-400 text-blue-900 rounded font-bold shadow hover:bg-yellow-300 transition">OK</button>
-      <button @click="showNotifModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      <div class="mb-4 text-gray-800 text-base font-semibold">{{ typeof notifMessage === 'object' ? notifMessage.value : notifMessage }}</div>
+      <button @click="() => { showNotifModal = false; if (notifMessage && typeof notifMessage === 'object') notifMessage.value = ''; }" class="px-6 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">OK</button>
+      <button @click="() => { showNotifModal = false; if (notifMessage && typeof notifMessage === 'object') notifMessage.value = ''; }" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
     </div>
   </div>
 
@@ -1832,6 +2132,19 @@ function cancelSaveEditSectionModal() {
         <button @click="cancelCloseScheduleModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
         <button @click="confirmCloseScheduleModal" class="px-4 py-2 bg-red-500 text-white rounded">Discard Changes</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Instructor Warning Modal -->
+  <div v-if="showInstructorWarningModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-70 pointer-events-auto">
+    <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
+      <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div class="mb-4 text-gray-800 text-base font-semibold">Instructor Name is empty, proceed with N/A Instructor?</div>
+      <div class="flex gap-2">
+        <button @click="cancelInstructorWarning" class="px-4 py-2 bg-gray-200 text-gray-800 rounded font-semibold hover:bg-gray-300 transition">Cancel</button>
+        <button @click="confirmInstructorWarning" class="px-4 py-2 bg-blue-900 text-white rounded font-semibold shadow hover:bg-blue-800 transition">Yes, Save</button>
+      </div>
+      <button @click="cancelInstructorWarning" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
     </div>
   </div>
 </template>

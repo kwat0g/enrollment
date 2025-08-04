@@ -154,6 +154,12 @@ INSERT INTO `schedules` VALUES
 (50, 1, 2, 3, 'Saturday', '13:00:00', '14:00:00', 'Lec'),
 (51, 1, 1, 3, 'Wednesday', '12:00:00', '17:00:00', 'Lab');
 
+-- Add instructor column to schedules table
+ALTER TABLE `schedules` ADD COLUMN `instructor` varchar(100) DEFAULT NULL AFTER `type`;
+
+-- Remove instructor column from subjects table (optional - keeping it for backward compatibility)
+-- ALTER TABLE `subjects` DROP COLUMN `instructor`;
+
 
 -- Table structure for sections
 DROP TABLE IF EXISTS `sections`;

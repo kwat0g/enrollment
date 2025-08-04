@@ -3,7 +3,7 @@ const { getSectionEnrollmentStatus } = require('../utils/helpers');
 
 // --- Admin: Assign subjects to a section (Enhanced) ---
 const assignSubjectsToSection = async (req, res) => {
-  const { subjectIds, validateOnly = false, mode = 'add' } = req.body;
+  const { subjectIds, validateOnly = false, mode = 'add', instructors = {} } = req.body;
   const sectionId = req.params.sectionId;
   
   try {
@@ -215,10 +215,13 @@ const assignSubjectsToSection = async (req, res) => {
             }
           }
 
+          // Get instructor for this subject (if provided)
+          const instructor = instructors[subject.id] || '';
+          
           // Insert schedule
           await db.query(
-            'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [sectionId, subject.id, room_id, day, start_time, end_time, type]
+            'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type, instructor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [sectionId, subject.id, room_id, day, start_time, end_time, type, instructor]
           );
           
           addedSubjects.push({
@@ -327,7 +330,7 @@ const bulkAssignSchedules = async (req, res) => {
   }
   try {
     for (const sched of schedules) {
-      const { subject_id, day, start_time, end_time, room, type } = sched;
+      const { subject_id, day, start_time, end_time, room, type, instructor } = sched;
       if (!subject_id || !day || !start_time || !end_time || !room || !type) {
         return res.status(400).json({ error: 'Missing required schedule fields.' });
       }
@@ -343,8 +346,8 @@ const bulkAssignSchedules = async (req, res) => {
         }
       }
       await db.query(
-        'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [sectionId, subject_id, roomId, day, start_time, end_time, type]
+        'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type, instructor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [sectionId, subject_id, roomId, day, start_time, end_time, type, instructor || '']
       );
     }
     res.json({ success: true });
@@ -405,7 +408,7 @@ async function checkRoomScheduleConflict(roomId, day, start_time, end_time, excl
 // --- Admin: Assign subjects to a section with schedules (robust, partial update) ---
 const assignWithSchedules = async (req, res) => {
   const sectionId = req.params.sectionId;
-  const { subjectIds, schedules, mode = 'add' } = req.body;
+  const { subjectIds, schedules, mode = 'add', instructors = {} } = req.body;
   
   if (!Array.isArray(subjectIds) || subjectIds.length === 0 || !Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({ error: 'Subjects and schedules are required.' });
@@ -445,20 +448,23 @@ const assignWithSchedules = async (req, res) => {
         }
       }
       
+      // Get instructor for this subject (if provided)
+      const instructor = instructors[subject_id] || '';
+      
       // Check if schedule exists
       const [existing] = await db.query('SELECT id FROM schedules WHERE section_id = ? AND subject_id = ?', [sectionId, subject_id]);
       
       if (existing.length) {
         // Update existing schedule
         await db.query(
-          'UPDATE schedules SET room_id=?, day=?, start_time=?, end_time=?, type=? WHERE section_id=? AND subject_id=?',
-          [roomId, day, start_time, end_time, type, sectionId, subject_id]
+          'UPDATE schedules SET room_id=?, day=?, start_time=?, end_time=?, type=?, instructor=? WHERE section_id=? AND subject_id=?',
+          [roomId, day, start_time, end_time, type, instructor, sectionId, subject_id]
         );
       } else {
         // Insert new schedule
         await db.query(
-          'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [sectionId, subject_id, roomId, day, start_time, end_time, type]
+          'INSERT INTO schedules (section_id, subject_id, room_id, day, start_time, end_time, type, instructor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [sectionId, subject_id, roomId, day, start_time, end_time, type, instructor]
         );
       }
     }

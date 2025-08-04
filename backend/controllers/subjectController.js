@@ -27,7 +27,7 @@ const getSubjects = async (req, res) => {
 
 // --- Admin: Add subject ---
 const createSubject = async (req, res) => {
-  const { code, name, units, type, course_id, year_level, instructor } = req.body;
+  const { code, name, units, type, course_id, year_level } = req.body;
   const requiredFields = [
     { key: 'code', label: 'Subject code' },
     { key: 'name', label: 'Subject name' },
@@ -41,16 +41,14 @@ const createSubject = async (req, res) => {
       return res.status(400).json({ error: `${field.label} is required.` });
     }
   }
-  // Instructor is not strictly required, but trim it if present
-  const trimmedInstructor = instructor ? instructor.toString().trim() : '';
   try {
     // Check for duplicate code with same type
     const [existing] = await db.query('SELECT * FROM subjects WHERE code = ? AND type = ? AND course_id = ? AND year_level = ?', [code.toString().trim(), type.toString().trim(), course_id, year_level]);
     if (existing.length > 0) {
       return res.status(400).json({ error: `Subject code '${code}' already exists with type '${type}'. Please use a different code or type.` });
     }
-    await db.query('INSERT INTO subjects (code, name, units, type, course_id, year_level, instructor) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-      [code.toString().trim(), name.toString().trim(), Number(units), type.toString().trim(), course_id, year_level, trimmedInstructor]);
+    await db.query('INSERT INTO subjects (code, name, units, type, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?)', 
+      [code.toString().trim(), name.toString().trim(), Number(units), type.toString().trim(), course_id, year_level]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
@@ -59,12 +57,11 @@ const createSubject = async (req, res) => {
 
 // --- Admin: Edit subject ---
 const updateSubject = async (req, res) => {
-  const { code, name, units, instructor } = req.body;
+  const { code, name, units } = req.body;
   
   // More lenient validation - check for empty strings and convert units to number
   const trimmedCode = code ? code.toString().trim() : '';
   const trimmedName = name ? name.toString().trim() : '';
-  const trimmedInstructor = instructor ? instructor.toString().trim() : '';
   
   const errors = [];
   if (!trimmedCode) {
@@ -118,8 +115,8 @@ const updateSubject = async (req, res) => {
       }
     }
     
-    // Update only the basic subject fields (code, name, units, instructor)
-    await db.query('UPDATE subjects SET code=?, name=?, units=?, instructor=? WHERE id=?', [trimmedCode, trimmedName, unitsNumber, trimmedInstructor, req.params.id]);
+    // Update only the basic subject fields (code, name, units)
+    await db.query('UPDATE subjects SET code=?, name=?, units=? WHERE id=?', [trimmedCode, trimmedName, unitsNumber, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });

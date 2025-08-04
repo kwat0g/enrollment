@@ -52,6 +52,7 @@ app.post('/api/auth/refresh', authController.refreshToken);
 
 // === STUDENT ROUTES ===
 app.get('/api/student/sections', authStudent, studentController.getAvailableSections);
+app.get('/api/student/sections/all', authStudent, studentController.getAllAvailableSections);
 app.get('/api/student/enrollment', authStudent, studentController.getCurrentEnrollment);
 app.get('/api/student/accountabilities', authStudent, studentController.getAccountabilities);
 app.get('/api/student/grades', authStudent, studentController.getGrades);
@@ -64,6 +65,11 @@ app.get('/api/admin/enrollments', enrollmentController.getPendingEnrollments);
 app.post('/api/admin/enrollments/:id/approve', enrollmentController.approveEnrollment);
 app.post('/api/admin/enrollments/:id/reject', enrollmentController.rejectEnrollment);
 
+// === IRREGULAR ENROLLMENT ROUTES ===
+app.get('/api/student/subjects/all-scheduled', authStudent, enrollmentController.getAllScheduledSubjects);
+app.post('/api/student/enroll/irregular', authStudent, enrollmentController.submitIrregularEnrollment);
+app.get('/api/admin/enrollments/:id/irregular-details', enrollmentController.getIrregularEnrollmentDetails);
+
 // === SECTION MANAGEMENT ROUTES ===
 app.get('/api/admin/sections', sectionController.getAllSections);
 app.post('/api/admin/sections', sectionController.createSection);
@@ -72,6 +78,7 @@ app.delete('/api/admin/sections/:id', sectionController.deleteSection);
 app.get('/api/admin/sections/:id/status', sectionController.getSectionStatus);
 app.post('/api/admin/sections/:id/status', sectionController.updateSectionStatus);
 app.get('/api/admin/sections/:sectionId/schedules', sectionController.getSectionSchedules);
+app.get('/api/admin/sections/:sectionId/enrollments', sectionController.getSectionEnrollments);
 
 // --- COURSE MANAGEMENT ROUTES ---
 app.get('/api/admin/courses', authAdmin, adminCourseController.getAllCourses);

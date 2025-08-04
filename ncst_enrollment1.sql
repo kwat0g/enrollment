@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 03, 2025 at 02:54 PM
+-- Generation Time: Aug 04, 2025 at 04:48 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.0.30
+-- PHP Version: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -90,10 +90,11 @@ INSERT INTO `courses` (`id`, `code`, `name`) VALUES
 CREATE TABLE `enrollments` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
-  `section_id` int(11) NOT NULL,
+  `section_id` int(11) DEFAULT NULL,
   `school_year` varchar(20) NOT NULL,
   `semester` varchar(20) NOT NULL,
   `status` varchar(20) NOT NULL,
+  `enrollment_type` enum('regular','irregular') DEFAULT 'regular',
   `date_applied` datetime DEFAULT NULL,
   `reference_number` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -102,11 +103,10 @@ CREATE TABLE `enrollments` (
 -- Dumping data for table `enrollments`
 --
 
-INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `date_applied`, `reference_number`) VALUES
-(1, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:22:45', NULL),
-(2, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:25:11', NULL),
-(3, 1, 1, '2025-2026', '1st Semester', 'rejected', '2025-08-01 20:26:31', NULL),
-(4, 1, 1, '2025-2026', '1st Semester', 'approved', '2025-08-01 20:44:57', 'ENR-20250801-4');
+INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `enrollment_type`, `date_applied`, `reference_number`) VALUES
+(15, 1, 9, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:37:59', NULL),
+(16, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:41:01', NULL),
+(17, 1, 8, '2025-2026', '1st Semester', 'pending', 'irregular', '2025-08-04 22:45:06', NULL);
 
 -- --------------------------------------------------------
 
@@ -122,6 +122,51 @@ CREATE TABLE `grades` (
   `semester` varchar(20) NOT NULL,
   `grade` decimal(4,2) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `irregular_enrollments`
+--
+
+CREATE TABLE `irregular_enrollments` (
+  `id` int(11) NOT NULL,
+  `enrollment_id` int(11) NOT NULL,
+  `subject_id` int(11) NOT NULL,
+  `schedule_id` int(11) NOT NULL,
+  `section_id` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `irregular_enrollments`
+--
+
+INSERT INTO `irregular_enrollments` (`id`, `enrollment_id`, `subject_id`, `schedule_id`, `section_id`, `created_at`) VALUES
+(79, 15, 1, 49, 8, '2025-08-04 14:40:09'),
+(80, 15, 2, 50, 8, '2025-08-04 14:40:09'),
+(81, 15, 3, 42, 9, '2025-08-04 14:40:09'),
+(82, 15, 4, 44, 9, '2025-08-04 14:40:09'),
+(83, 15, 5, 53, 8, '2025-08-04 14:40:09'),
+(84, 15, 6, 54, 8, '2025-08-04 14:40:09'),
+(85, 15, 7, 48, 9, '2025-08-04 14:40:09'),
+(86, 15, 8, 47, 9, '2025-08-04 14:40:09'),
+(87, 16, 1, 49, 8, '2025-08-04 14:41:01'),
+(88, 16, 2, 50, 8, '2025-08-04 14:41:01'),
+(89, 16, 3, 51, 8, '2025-08-04 14:41:01'),
+(90, 16, 4, 52, 8, '2025-08-04 14:41:01'),
+(91, 16, 5, 45, 9, '2025-08-04 14:41:01'),
+(92, 16, 6, 46, 9, '2025-08-04 14:41:01'),
+(93, 16, 7, 48, 9, '2025-08-04 14:41:01'),
+(94, 16, 8, 47, 9, '2025-08-04 14:41:01'),
+(111, 17, 1, 49, 8, '2025-08-04 14:46:31'),
+(112, 17, 2, 50, 8, '2025-08-04 14:46:31'),
+(113, 17, 3, 51, 8, '2025-08-04 14:46:31'),
+(114, 17, 4, 52, 8, '2025-08-04 14:46:31'),
+(115, 17, 5, 45, 9, '2025-08-04 14:46:31'),
+(116, 17, 6, 46, 9, '2025-08-04 14:46:31'),
+(117, 17, 7, 55, 8, '2025-08-04 14:46:31'),
+(118, 17, 8, 56, 8, '2025-08-04 14:46:31');
 
 -- --------------------------------------------------------
 
@@ -143,9 +188,19 @@ CREATE TABLE `notifications` (
 --
 
 INSERT INTO `notifications` (`id`, `student_id`, `message`, `type`, `created_at`, `is_read`) VALUES
-(1, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:23:35', 1),
-(2, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:25:59', 1),
-(3, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-01 20:29:43', 1);
+(1, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 18:20:23', 1),
+(2, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:17:15', 1),
+(3, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:17:18', 1),
+(4, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:17:46', 1),
+(5, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:17:47', 1),
+(6, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:17:49', 1),
+(7, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:18:15', 1),
+(8, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:33:26', 1),
+(9, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:35:10', 1),
+(10, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:37:09', 1),
+(11, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:55:45', 1),
+(12, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:40:38', 1),
+(13, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:44:58', 1);
 
 -- --------------------------------------------------------
 
@@ -167,7 +222,7 @@ CREATE TABLE `rooms` (
 --
 
 INSERT INTO `rooms` (`id`, `name`, `capacity`, `type`, `facilities`, `status`) VALUES
-(3, '1108', 45, 'Lecture', 'Computer', 'active');
+(3, '1108', 50, 'Lecture', 'Computer', 'active');
 
 -- --------------------------------------------------------
 
@@ -183,17 +238,31 @@ CREATE TABLE `schedules` (
   `day` varchar(20) DEFAULT NULL,
   `start_time` time DEFAULT NULL,
   `end_time` time DEFAULT NULL,
-  `type` varchar(10) DEFAULT NULL
+  `type` varchar(10) DEFAULT NULL,
+  `instructor` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `schedules`
 --
 
-INSERT INTO `schedules` (`id`, `section_id`, `subject_id`, `room_id`, `day`, `start_time`, `end_time`, `type`) VALUES
-(47, 1, 3, 3, 'Tuesday', '14:00:00', '15:00:00', 'Lab'),
-(50, 1, 2, 3, 'Saturday', '13:00:00', '14:00:00', 'Lec'),
-(51, 1, 1, 3, 'Wednesday', '12:00:00', '17:00:00', 'Lab');
+INSERT INTO `schedules` (`id`, `section_id`, `subject_id`, `room_id`, `day`, `start_time`, `end_time`, `type`, `instructor`) VALUES
+(41, 9, 1, 3, 'Monday', '07:00:00', '08:00:00', 'Lab', 'M1'),
+(42, 9, 3, 3, 'Monday', '08:00:00', '09:00:00', 'Lab', 'M2'),
+(43, 9, 2, 3, 'Tuesday', '07:00:00', '08:00:00', 'Lec', 'M3'),
+(44, 9, 4, 3, 'Tuesday', '08:00:00', '09:00:00', 'Lec', 'M4'),
+(45, 9, 5, 3, 'Monday', '09:00:00', '10:00:00', 'Lab', 'M5'),
+(46, 9, 6, 3, 'Tuesday', '09:00:00', '10:00:00', 'Lec', 'M6'),
+(47, 9, 8, 3, 'Monday', '10:00:00', '11:00:00', 'Lec', 'M7'),
+(48, 9, 7, 3, 'Tuesday', '10:00:00', '11:00:00', 'Lab', 'M8'),
+(49, 8, 1, 3, 'Monday', '14:00:00', '15:00:00', 'Lab', '1'),
+(50, 8, 2, 3, 'Tuesday', '14:00:00', '15:00:00', 'Lec', '2'),
+(51, 8, 3, 3, 'Monday', '15:00:00', '16:00:00', 'Lab', '3'),
+(52, 8, 4, 3, 'Tuesday', '15:00:00', '16:00:00', 'Lec', '4'),
+(53, 8, 5, 3, 'Monday', '16:00:00', '17:00:00', 'Lab', '5'),
+(54, 8, 6, 3, 'Tuesday', '16:00:00', '17:00:00', 'Lec', '6'),
+(55, 8, 7, 3, 'Monday', '17:00:00', '18:00:00', 'Lab', '7'),
+(56, 8, 8, 3, 'Monday', '18:00:00', '19:00:00', 'Lec', '8');
 
 -- --------------------------------------------------------
 
@@ -216,8 +285,8 @@ CREATE TABLE `sections` (
 
 INSERT INTO `sections` (`id`, `name`, `year_level`, `course_id`, `schedule_type`, `status`) VALUES
 (0, 'Template', '', 1, '', 'template'),
-(1, 'BSIT-31A2', '3rd', 1, 'afternoon', 'closed'),
-(18, 'BSIT-41M2', '4th', 1, 'morning', 'closed');
+(8, 'BSIT-31A2', '3rd', 1, 'afternoon', 'closed'),
+(9, 'BSIT-31M1', '3rd', 1, 'morning', 'closed');
 
 -- --------------------------------------------------------
 
@@ -245,7 +314,7 @@ CREATE TABLE `students` (
 --
 
 INSERT INTO `students` (`id`, `student_id`, `last_name`, `first_name`, `middle_name`, `suffix`, `gender`, `address`, `contact_number`, `email`, `year_level`, `course_id`) VALUES
-(1, '2025-00001', 'Bungubung', 'Ehdrian', 'Latras', '', 'Male', 'Blk 5 ', '09123456789', 'bungubung.ehdrian@ncst.edu.ph', '3rd', 1);
+(1, '2025-00001', 'Bungubung', 'Ehdrian', 'Latras', '', 'Male', 'Blk 5 Lot 10', '09123456789', 'bungubung.ehdrian@ncst.edu.ph', '3rd', 1);
 
 -- --------------------------------------------------------
 
@@ -270,8 +339,13 @@ CREATE TABLE `subjects` (
 
 INSERT INTO `subjects` (`id`, `code`, `name`, `units`, `type`, `course_id`, `year_level`, `instructor`) VALUES
 (1, 'IT301', 'INTEG', 2, 'Lab', 1, '3rd', 'Jarmaine Diegas'),
-(2, 'IT301', 'INTEG', 1, 'Lec', 1, '3rd', 'Gnehm Ryien Rabe'),
-(3, 'IT302', 'HCI', 2, 'Lab', 1, '3rd', 'EWAN');
+(2, 'IT301', 'INTEG', 1, 'Lec', 1, '3rd', 'EWAN'),
+(3, 'IT302', 'HCI', 2, 'Lab', 1, '3rd', ''),
+(4, 'IT302', 'HCI', 1, 'Lec', 1, '3rd', ''),
+(5, 'IT303', 'NETWORKING 2', 2, 'Lab', 1, '3rd', NULL),
+(6, 'IT303', 'NETWORKING 2', 1, 'Lec', 1, '3rd', NULL),
+(7, 'IT304', 'SIA', 2, 'Lab', 1, '3rd', NULL),
+(8, 'IT304', 'SIA', 1, 'Lec', 1, '3rd', NULL);
 
 --
 -- Indexes for dumped tables
@@ -312,6 +386,17 @@ ALTER TABLE `grades`
   ADD PRIMARY KEY (`id`),
   ADD KEY `student_id` (`student_id`),
   ADD KEY `subject_id` (`subject_id`);
+
+--
+-- Indexes for table `irregular_enrollments`
+--
+ALTER TABLE `irregular_enrollments`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_enrollment_subject` (`enrollment_id`,`subject_id`,`schedule_id`),
+  ADD KEY `idx_irregular_enrollment_id` (`enrollment_id`),
+  ADD KEY `idx_irregular_subject_id` (`subject_id`),
+  ADD KEY `idx_irregular_schedule_id` (`schedule_id`),
+  ADD KEY `idx_irregular_section_id` (`section_id`);
 
 --
 -- Indexes for table `notifications`
@@ -383,7 +468,7 @@ ALTER TABLE `courses`
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `grades`
@@ -392,10 +477,16 @@ ALTER TABLE `grades`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `irregular_enrollments`
+--
+ALTER TABLE `irregular_enrollments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=119;
+
+--
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `rooms`
@@ -407,13 +498,13 @@ ALTER TABLE `rooms`
 -- AUTO_INCREMENT for table `schedules`
 --
 ALTER TABLE `schedules`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=70;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
 
 --
 -- AUTO_INCREMENT for table `sections`
 --
 ALTER TABLE `sections`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `students`
@@ -425,7 +516,7 @@ ALTER TABLE `students`
 -- AUTO_INCREMENT for table `subjects`
 --
 ALTER TABLE `subjects`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- Constraints for dumped tables
@@ -450,6 +541,15 @@ ALTER TABLE `enrollments`
 ALTER TABLE `grades`
   ADD CONSTRAINT `grades_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`),
   ADD CONSTRAINT `grades_ibfk_2` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`);
+
+--
+-- Constraints for table `irregular_enrollments`
+--
+ALTER TABLE `irregular_enrollments`
+  ADD CONSTRAINT `irregular_enrollments_ibfk_1` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollments` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `irregular_enrollments_ibfk_2` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `irregular_enrollments_ibfk_3` FOREIGN KEY (`schedule_id`) REFERENCES `schedules` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `irregular_enrollments_ibfk_4` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `notifications`
