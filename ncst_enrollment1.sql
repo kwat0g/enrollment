@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 04, 2025 at 04:48 PM
+-- Generation Time: Aug 10, 2025 at 07:23 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -106,7 +106,9 @@ CREATE TABLE `enrollments` (
 INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `enrollment_type`, `date_applied`, `reference_number`) VALUES
 (15, 1, 9, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:37:59', NULL),
 (16, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:41:01', NULL),
-(17, 1, 8, '2025-2026', '1st Semester', 'pending', 'irregular', '2025-08-04 22:45:06', NULL);
+(17, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:45:06', NULL),
+(18, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:49:44', NULL),
+(19, 1, 9, '2025-2026', '1st Semester', 'pending', 'irregular', '2025-08-10 13:21:11', NULL);
 
 -- --------------------------------------------------------
 
@@ -166,7 +168,19 @@ INSERT INTO `irregular_enrollments` (`id`, `enrollment_id`, `subject_id`, `sched
 (115, 17, 5, 45, 9, '2025-08-04 14:46:31'),
 (116, 17, 6, 46, 9, '2025-08-04 14:46:31'),
 (117, 17, 7, 55, 8, '2025-08-04 14:46:31'),
-(118, 17, 8, 56, 8, '2025-08-04 14:46:31');
+(118, 17, 8, 56, 8, '2025-08-04 14:46:31'),
+(127, 18, 1, 49, 8, '2025-08-10 05:04:10'),
+(128, 18, 2, 50, 8, '2025-08-10 05:04:10'),
+(129, 18, 3, 42, 9, '2025-08-10 05:04:10'),
+(130, 18, 4, 44, 9, '2025-08-10 05:04:10'),
+(131, 18, 5, 53, 8, '2025-08-10 05:04:10'),
+(132, 18, 6, 54, 8, '2025-08-10 05:04:10'),
+(133, 18, 7, 48, 9, '2025-08-10 05:04:10'),
+(134, 18, 8, 47, 9, '2025-08-10 05:04:10'),
+(135, 19, 1, 41, 9, '2025-08-10 05:21:11'),
+(136, 19, 2, 43, 9, '2025-08-10 05:21:11'),
+(137, 19, 3, 51, 8, '2025-08-10 05:21:11'),
+(138, 19, 4, 52, 8, '2025-08-10 05:21:11');
 
 -- --------------------------------------------------------
 
@@ -200,7 +214,9 @@ INSERT INTO `notifications` (`id`, `student_id`, `message`, `type`, `created_at`
 (10, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:37:09', 1),
 (11, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 20:55:45', 1),
 (12, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:40:38', 1),
-(13, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:44:58', 1);
+(13, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:44:58', 1),
+(14, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:49:33', 1),
+(15, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-10 13:17:47', 1);
 
 -- --------------------------------------------------------
 
@@ -468,7 +484,7 @@ ALTER TABLE `courses`
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `grades`
@@ -480,13 +496,13 @@ ALTER TABLE `grades`
 -- AUTO_INCREMENT for table `irregular_enrollments`
 --
 ALTER TABLE `irregular_enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=119;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=139;
 
 --
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `rooms`
