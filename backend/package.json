@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "db:setup:freshman": "node scripts/create_freshman_enrollments_table.js"
   },
   "keywords": [
     "enrollment",

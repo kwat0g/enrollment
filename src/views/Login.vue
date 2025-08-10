@@ -13,6 +13,11 @@
           <input v-model="lastName" type="password" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-300" />
         </div>
         <button :disabled="loading" class="w-full bg-blue-900 text-yellow-300 py-2 rounded font-semibold hover:bg-yellow-300 hover:text-blue-900 transition">{{ loading ? 'Logging in...' : 'Login' }}</button>
+        <div class="mt-3">
+          <router-link to="/freshman-enrollment" class="block w-full text-center border border-blue-900 text-blue-900 py-2 rounded font-semibold hover:bg-blue-50 transition">
+            Freshman Enrollment
+          </router-link>
+        </div>
         <div v-if="error" class="text-red-600 text-center mt-4">{{ error }}</div>
       </form>
     </div>

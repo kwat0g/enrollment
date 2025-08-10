@@ -5,29 +5,29 @@ import { useAdminStore } from '@/stores/admin'
 const routes = [
   {
     path: '/',
-    name: 'Home',
+    name: 'Landing',
+    component: () => import('@/views/Landing.vue'),
     beforeEnter: (to, from, next) => {
-      // Check authentication state and redirect accordingly
+      // Show landing for guests; redirect authenticated users
       const userStore = useUserStore()
       const adminStore = useAdminStore()
-      
-      // Load from storage first
       userStore.loadFromStorage()
       adminStore.loadFromStorage()
-      
-      if (adminStore.isAuthenticated()) {
-        next('/admin')
-      } else if (userStore.isAuthenticated()) {
-        next('/student')
-      } else {
-        next('/login')
-      }
+      if (adminStore.isAuthenticated()) return next('/admin')
+      if (userStore.isAuthenticated()) return next('/student')
+      return next()
     },
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
+  },
+  {
+    path: '/freshman-enrollment',
+    name: 'FreshmanEnrollment',
+    component: () => import('@/views/FreshmanEnrollment.vue'),
+    meta: { hidden: true },
   },
   {
     path: '/dashboard',
@@ -127,7 +127,7 @@ router.beforeEach((to, from, next) => {
   // Define protected routes
   const adminRoutes = ['/admin']
   const studentRoutes = ['/student', '/dashboard']
-  const publicRoutes = ['/login', '/@dminlogin-']
+  const publicRoutes = ['/login', '/@dminlogin-', '/freshman-enrollment']
   
   const isAdminRoute = adminRoutes.some(route => to.path.startsWith(route))
   const isStudentRoute = studentRoutes.some(route => to.path.startsWith(route))

@@ -23,6 +23,8 @@ const accountabilityController = require('./controllers/accountabilityController
 const gradeController = require('./controllers/gradeController');
 const roomController = require('./controllers/roomController');
 const instructorController = require('./controllers/instructorController');
+const publicEnrollmentController = require('./controllers/publicEnrollmentController');
+const adminFreshmanEnrollmentController = require('./controllers/adminFreshmanEnrollmentController');
 
 const app = express();
 
@@ -80,6 +82,20 @@ app.post('/api/student/enroll', authStudent, enrollmentController.submitEnrollme
 app.get('/api/admin/enrollments', authAdmin, enrollmentController.getPendingEnrollments);
 app.post('/api/admin/enrollments/:id/approve', authAdmin, enrollmentController.approveEnrollment);
 app.post('/api/admin/enrollments/:id/reject', authAdmin, enrollmentController.rejectEnrollment);
+
+// === FRESHMAN ENROLLMENT (ADMIN) ===
+app.get('/api/admin/freshman-enrollments', authAdmin, adminFreshmanEnrollmentController.getAllFreshmanEnrollments);
+app.get('/api/admin/freshman-enrollments/:id', authAdmin, adminFreshmanEnrollmentController.getFreshmanEnrollmentById);
+app.post('/api/admin/freshman-enrollments/:id/accept', authAdmin, adminFreshmanEnrollmentController.acceptFreshmanEnrollment);
+app.post('/api/admin/freshman-enrollments/:id/reject', authAdmin, adminFreshmanEnrollmentController.rejectFreshmanEnrollment);
+
+// === PUBLIC/OPEN ROUTES ===
+// Courses list for public/freshman enrollment form (no auth)
+app.get('/api/public/courses', subjectController.getCourses);
+// Backward-compatible public alias
+app.get('/api/courses', subjectController.getCourses);
+// Freshman enrollment submission (no auth)
+app.post('/api/public/freshman-enrollment', publicEnrollmentController.submitFreshmanEnrollment);
 
 // === IRREGULAR ENROLLMENT ROUTES ===
 app.get('/api/student/subjects/all-scheduled', authStudent, enrollmentController.getAllScheduledSubjects);

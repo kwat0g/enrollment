@@ -3,6 +3,7 @@
     <h2 class="text-base sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Student Management</h2>
     <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6 w-full">
       <button @click="openAddModal" class="bg-blue-900 text-white px-4 py-2 rounded font-semibold hover:bg-blue-800 transition">Add Student</button>
+      <button @click="openPendingModal" class="bg-emerald-600 text-white px-4 py-2 rounded font-semibold hover:bg-emerald-500 transition">Show Pending Enrollment</button>
     </div>
     <div v-if="loading" class="text-center py-8 text-gray-500">Loading students...</div>
     <div v-else class="overflow-x-auto bg-white rounded-xl shadow-lg p-2 sm:p-6 w-full min-w-0 max-w-full">
@@ -155,6 +156,164 @@
           <button @click="cancelSaveStudent" class="px-4 py-2 bg-gray-300 rounded font-semibold shadow hover:bg-gray-400 transition">Cancel</button>
         </div>
         <button @click="showSaveConfirmModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Pending Freshman Enrollments Modal -->
+    <div v-if="showPendingModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-4 sm:p-6 w-auto max-w-[95vw] relative">
+        <h3 class="text-lg font-bold text-blue-900 mb-4">Pending Freshman Enrollments</h3>
+        <div v-if="pendingLoading" class="text-gray-500 py-4">Loading pending enrollments...</div>
+        <div v-else>
+          <div v-if="pendingError" class="mb-3 p-3 bg-red-100 border border-red-300 text-red-700 rounded">{{ pendingError }}</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-[980px] w-full border text-xs sm:text-sm">
+              <thead class="bg-gray-100 text-gray-900">
+                <tr>
+                  <th class="py-2 px-2 text-center">Name</th>
+                  <th class="py-2 px-2 text-center">Email</th>
+                  <th class="py-2 px-2 text-center">Mobile</th>
+                  <th class="py-2 px-2 text-center">Course</th>
+                  <th class="py-2 px-2 text-center">Admission</th>
+                  <th class="py-2 px-2 text-center">Year</th>
+                  <th class="py-2 px-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="e in pendingEnrollments" :key="e.id" class="border-b">
+                  <td class="py-2 px-2 text-center">{{ e.last_name }}, {{ e.first_name }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.email }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.mobile }}</td>
+                  <td class="py-2 px-2 text-center">{{ (coursesMap[e.course_id]?.code) || (coursesMap[e.course_id]?.name) || '-' }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.admission_type }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.year_level }}</td>
+                  <td class="py-2 px-2 text-center">
+                    <div class="flex gap-2 justify-center">
+                      <button @click="viewEnrollment(e)" class="px-2 py-1 bg-blue-100 text-blue-900 rounded hover:bg-blue-200">View</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="pendingEnrollments.length === 0">
+                  <td colspan="7" class="text-center text-gray-400 py-6">No pending enrollments found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <button @click="closePendingModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+    
+    <!-- Enrollment Details Modal -->
+    <div v-if="showDetailsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-4 sm:p-6 w-11/12 max-w-3xl relative max-h-[85vh] flex flex-col">
+        <h3 class="text-lg font-bold text-blue-900 mb-4">Enrollment Details</h3>
+        <div class="overflow-y-auto max-h-[60vh] sm:max-h-[65vh] pr-1">
+          <div v-if="detailsLoading" class="text-gray-500">Loading details...</div>
+          <div v-else-if="!selectedEnrollment" class="text-gray-500">No data.</div>
+          <div v-else class="space-y-6 text-sm">
+            <!-- Personal -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Personal</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Name</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.last_name }}, {{ selectedEnrollment.first_name }} <span v-if="selectedEnrollment.middle_name">{{ selectedEnrollment.middle_name }}</span></div>
+                <div class="text-gray-500">Birthdate</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.birthdate }}</div>
+                <div class="text-gray-500">Gender</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.sex }}</div>
+                <div class="text-gray-500">Civil Status</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.civil_status }}</div>
+                <div class="text-gray-500">Nationality</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.nationality }}</div>
+                <div class="text-gray-500">Religion</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.religion }}</div>
+                <div class="text-gray-500">Admission Type</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.admission_type }}</div>
+              </div>
+            </div>
+
+            <!-- Contact -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Contact</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Address</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.address_line }}, {{ selectedEnrollment.barangay }}, {{ selectedEnrollment.city }}, {{ selectedEnrollment.province }} ({{ selectedEnrollment.zip }})</div>
+                <div class="text-gray-500">Email</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.email }}</div>
+                <div class="text-gray-500">Mobile</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.mobile }}</div>
+              </div>
+            </div>
+
+            <!-- Father -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Father</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Name</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.father_name }}</div>
+                <div class="text-gray-500">Occupation</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.father_occupation || '-' }}</div>
+                <div class="text-gray-500">Contact</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.father_contact || '-' }}</div>
+              </div>
+            </div>
+
+            <!-- Mother -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Mother</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Name</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.mother_name }}</div>
+                <div class="text-gray-500">Occupation</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.mother_occupation || '-' }}</div>
+                <div class="text-gray-500">Contact</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.mother_contact || '-' }}</div>
+              </div>
+            </div>
+
+            <!-- Guardian -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Guardian</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Name</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.guardian_name }}</div>
+                <div class="text-gray-500">Relationship</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.guardian_relation }}</div>
+                <div class="text-gray-500">Contact</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.guardian_contact || '-' }}</div>
+              </div>
+            </div>
+
+            <!-- Academics -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Academics</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">SHS</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.shs_name || '-' }}<span v-if="selectedEnrollment.shs_track"> | {{ selectedEnrollment.shs_track }}</span></div>
+              </div>
+            </div>
+
+            <!-- Preferences -->
+            <div>
+              <h4 class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Preferences</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-y-1">
+                <div class="text-gray-500">Course</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ (coursesMap[selectedEnrollment.course_id]?.name) || selectedEnrollment.course_id || '-' }}</div>
+                <div class="text-gray-500">Year Level</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.year_level || '-' }}</div>
+                <div class="text-gray-500">Preferred Schedule</div>
+                <div class="col-span-1 sm:col-span-2 text-gray-900">{{ selectedEnrollment.preferred_sched || '-' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-2 justify-end">
+          <button @click="showDetailsModal=false" class="px-4 py-2 bg-gray-200 rounded">Close</button>
+          <button v-if="selectedEnrollment" @click="acceptEnrollment(selectedEnrollment.id)" class="px-4 py-2 bg-emerald-600 text-white rounded">Accept</button>
+          <button v-if="selectedEnrollment" @click="rejectEnrollment(selectedEnrollment.id)" class="px-4 py-2 bg-red-500 text-white rounded">Reject</button>
+        </div>
+        <button @click="showDetailsModal=false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
   </div>
@@ -353,6 +512,112 @@ function confirmDeleteStudentAction() {
 
 const showSaveConfirmModal = ref(false)
 
+// Pending freshman enrollments modal state
+const showPendingModal = ref(false)
+const pendingLoading = ref(false)
+const pendingError = ref('')
+const pendingEnrollments = ref([])
+const showDetailsModal = ref(false)
+const selectedEnrollment = ref(null)
+const detailsLoading = ref(false)
+const coursesMap = ref({})
+
+function openPendingModal() {
+  pendingError.value = ''
+  showPendingModal.value = true
+  fetchPendingEnrollments()
+}
+
+function closePendingModal() {
+  showPendingModal.value = false
+}
+
+function fetchPendingEnrollments() {
+  pendingLoading.value = true
+  fetch('http://localhost:5000/api/admin/freshman-enrollments', {
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        pendingError.value = data.error
+        pendingEnrollments.value = []
+      } else {
+        pendingEnrollments.value = Array.isArray(data) ? data : []
+      }
+      pendingLoading.value = false
+    })
+    .catch(() => {
+      pendingError.value = 'Failed to fetch pending enrollments.'
+      pendingEnrollments.value = []
+      pendingLoading.value = false
+    })
+}
+
+function viewEnrollment(e) {
+  if (!e || !e.id) return
+  showDetailsModal.value = true
+  detailsLoading.value = true
+  selectedEnrollment.value = null
+  fetch(`http://localhost:5000/api/admin/freshman-enrollments/${e.id}`, {
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data && !data.error) {
+        selectedEnrollment.value = data
+      }
+      detailsLoading.value = false
+    })
+    .catch(() => {
+      detailsLoading.value = false
+    })
+}
+
+function acceptEnrollment(id) {
+  if (!id) return
+  if (!confirm('Accept this enrollment?')) return
+  fetch(`http://localhost:5000/api/admin/freshman-enrollments/${id}/accept`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        pendingError.value = data.error
+        return
+      }
+      // Refresh list and close details if open
+      fetchPendingEnrollments()
+      showDetailsModal.value = false
+    })
+    .catch(() => {
+      pendingError.value = 'Failed to accept enrollment.'
+    })
+}
+
+function rejectEnrollment(id) {
+  if (!id) return
+  if (!confirm('Reject this enrollment?')) return
+  fetch(`http://localhost:5000/api/admin/freshman-enrollments/${id}/reject`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        pendingError.value = data.error
+        return
+      }
+      // Refresh list and close details if open
+      fetchPendingEnrollments()
+      showDetailsModal.value = false
+    })
+    .catch(() => {
+      pendingError.value = 'Failed to reject enrollment.'
+    })
+}
+
 function trySaveStudent() {
   // Only show confirmation in edit mode
   if (isEditMode.value) {
@@ -371,8 +636,27 @@ function cancelSaveStudent() {
   showSaveConfirmModal.value = false
 }
 
+function loadCourses() {
+  fetch('/api/public/courses')
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        console.error(data.error)
+      } else {
+        const map = {}
+        data.forEach(course => {
+          map[course.id] = { name: course.name, code: course.code }
+        })
+        coursesMap.value = map
+      }
+    })
+    .catch(() => {
+      console.error('Failed to load courses')
+    })
+}
+
 onMounted(() => {
   fetchStudents()
-  fetchCourses()
+  loadCourses()
 })
 </script>
