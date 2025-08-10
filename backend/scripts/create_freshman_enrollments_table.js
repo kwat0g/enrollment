@@ -8,10 +8,10 @@ const { db } = require('../config/database');
 async function main() {
   const sql = `
     CREATE TABLE IF NOT EXISTS freshman_enrollments (
-      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      id INT NOT NULL AUTO_INCREMENT,
       -- linkage
-      student_id INT UNSIGNED NULL,
-      course_id INT UNSIGNED NULL,
+      student_id INT NULL,
+      course_id INT NULL,
 
       -- step 1: personal
       first_name VARCHAR(100) NOT NULL,
@@ -60,6 +60,7 @@ async function main() {
 
       -- consent and meta
       consent TINYINT(1) NOT NULL DEFAULT 0,
+      status ENUM('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
 
@@ -78,7 +79,7 @@ async function main() {
   } catch (err) {
     console.error('❌ Failed to create table:', err.message);
     process.exitCode = 1;
-  } finally {
+  } finally { 
     db.end && db.end();
   }
 }

@@ -88,6 +88,20 @@ app.get('/api/admin/freshman-enrollments', authAdmin, adminFreshmanEnrollmentCon
 app.get('/api/admin/freshman-enrollments/:id', authAdmin, adminFreshmanEnrollmentController.getFreshmanEnrollmentById);
 app.post('/api/admin/freshman-enrollments/:id/accept', authAdmin, adminFreshmanEnrollmentController.acceptFreshmanEnrollment);
 app.post('/api/admin/freshman-enrollments/:id/reject', authAdmin, adminFreshmanEnrollmentController.rejectFreshmanEnrollment);
+app.post('/api/admin/freshman-enrollments', authAdmin, adminFreshmanEnrollmentController.submitAdminFreshmanEnrollment);
+// Fetch freshman enrollment by student_id (for Admin modal edit sync)
+app.get(
+  '/api/admin/freshman-enrollments/by-student/:student_id',
+  authAdmin,
+  adminFreshmanEnrollmentController.getFreshmanEnrollmentByStudentId
+);
+
+// Update freshman enrollment by student_id (for Admin modal edit sync)
+app.put(
+  '/api/admin/freshman-enrollments/by-student/:student_id',
+  authAdmin,
+  adminFreshmanEnrollmentController.updateFreshmanEnrollmentByStudentId
+);
 
 // === PUBLIC/OPEN ROUTES ===
 // Courses list for public/freshman enrollment form (no auth)

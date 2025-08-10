@@ -1,7 +1,18 @@
 <template>
   <div class="min-h-screen w-full flex flex-col items-center justify-center bg-cover bg-center px-2" style="background-image: url('/src/img/background.jpg');">
     <div class="bg-white bg-opacity-90 p-4 sm:p-8 rounded-xl shadow-2xl w-full max-w-md border-t-8 border-blue-900 mx-auto">
-      <img src="@/img/logo.png" alt="NCST Logo" class="mx-auto mb-6 w-20" />
+      <img
+        src="@/img/logo.png"
+        alt="NCST Logo"
+        class="mx-auto mb-6 w-20 select-none"
+        @mousedown="handleLogoMouseDown"
+        @mouseup="handleLogoMouseUp"
+        @mouseleave="handleLogoMouseUp"
+        @touchstart.passive="handleLogoTouchStart"
+        @touchend.passive="handleLogoTouchEnd"
+        @click="handleLogoClick"
+        draggable="false"
+      />
       <h2 class="text-base sm:text-2xl font-bold text-blue-900 text-center mb-4">NCST Enrollment System</h2>
       <form @submit.prevent="handleLogin">
         <div class="mb-4">
@@ -13,11 +24,6 @@
           <input v-model="lastName" type="password" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-300" />
         </div>
         <button :disabled="loading" class="w-full bg-blue-900 text-yellow-300 py-2 rounded font-semibold hover:bg-yellow-300 hover:text-blue-900 transition">{{ loading ? 'Logging in...' : 'Login' }}</button>
-        <div class="mt-3">
-          <router-link to="/freshman-enrollment" class="block w-full text-center border border-blue-900 text-blue-900 py-2 rounded font-semibold hover:bg-blue-50 transition">
-            Freshman Enrollment
-          </router-link>
-        </div>
         <div v-if="error" class="text-red-600 text-center mt-4">{{ error }}</div>
       </form>
     </div>
@@ -29,11 +35,60 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
+const router = useRouter()
+
+// Hidden admin login triggers: long-press logo (1.2s) or triple-click within 500ms
+const tapCount = ref(0)
+let tapTimer = null
+let pressTimer = null
+
+const goAdmin = () => {
+  try {
+    router.push('/admin/login')
+  } catch (e) {
+    // fallback path if route differs
+    router.push('/admin')
+  }
+}
+
+const handleLogoClick = () => {
+  tapCount.value++
+  if (tapCount.value === 3) {
+    clearTimeout(tapTimer)
+    tapTimer = null
+    tapCount.value = 0
+    goAdmin()
+    return
+  }
+  if (!tapTimer) {
+    tapTimer = setTimeout(() => {
+      tapCount.value = 0
+      tapTimer = null
+    }, 500)
+  }
+}
+
+const handleLogoMouseDown = () => {
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(goAdmin, 1200)
+}
+const handleLogoMouseUp = () => {
+  clearTimeout(pressTimer)
+  pressTimer = null
+}
+const handleLogoTouchStart = () => {
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(goAdmin, 1200)
+}
+const handleLogoTouchEnd = () => {
+  clearTimeout(pressTimer)
+  pressTimer = null
+}
+
 const studentId = ref('')
 const lastName = ref('')
 const error = ref('')
 const loading = ref(false)
-const router = useRouter()
 const userStore = useUserStore()
 
 onMounted(() => {

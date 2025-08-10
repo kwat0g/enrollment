@@ -110,9 +110,29 @@ const routes = [
   },
 ]
 
+const HEADER_OFFSET = 68 // adjust if header height changes
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior(to, from, savedPosition) {
+    // Restore saved scroll on back/forward
+    if (savedPosition) return savedPosition
+
+    // Hash/anchor navigation with header offset
+    if (to.hash) {
+      try {
+        // Let Vue Router handle finding the element; apply offset and smooth behavior
+        return { el: to.hash, top: HEADER_OFFSET, behavior: 'smooth' }
+      } catch (e) {
+        // Fallback: scroll to top if element not found
+        return { top: 0 }
+      }
+    }
+
+    // Default: scroll to top
+    return { top: 0 }
+  },
 })
 
 // Global navigation guard

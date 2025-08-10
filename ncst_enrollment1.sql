@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 10, 2025 at 07:23 AM
+-- Generation Time: Aug 10, 2025 at 09:31 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -109,6 +109,66 @@ INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `sem
 (17, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:45:06', NULL),
 (18, 1, 8, '2025-2026', '1st Semester', 'rejected', 'irregular', '2025-08-04 22:49:44', NULL),
 (19, 1, 9, '2025-2026', '1st Semester', 'pending', 'irregular', '2025-08-10 13:21:11', NULL);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `freshman_enrollments`
+--
+
+CREATE TABLE `freshman_enrollments` (
+  `id` int(11) NOT NULL,
+  `student_id` varchar(11) DEFAULT NULL,
+  `course_id` int(11) DEFAULT NULL,
+  `first_name` varchar(100) NOT NULL,
+  `middle_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) NOT NULL,
+  `suffix` varchar(20) DEFAULT NULL,
+  `birthdate` date NOT NULL,
+  `sex` enum('Male','Female','Other') NOT NULL,
+  `civil_status` varchar(50) NOT NULL,
+  `nationality` varchar(100) NOT NULL,
+  `citizenship` varchar(100) DEFAULT NULL,
+  `place_of_birth` varchar(255) NOT NULL,
+  `religion` varchar(100) NOT NULL,
+  `email` varchar(150) NOT NULL,
+  `mobile` varchar(20) NOT NULL,
+  `region_code` varchar(10) NOT NULL,
+  `province_code` varchar(10) DEFAULT NULL,
+  `city_code` varchar(10) NOT NULL,
+  `barangay_code` varchar(15) NOT NULL,
+  `region` varchar(150) DEFAULT NULL,
+  `province` varchar(150) DEFAULT NULL,
+  `city` varchar(150) DEFAULT NULL,
+  `barangay` varchar(150) DEFAULT NULL,
+  `address_line` varchar(255) NOT NULL,
+  `zip` varchar(10) NOT NULL,
+  `father_name` varchar(150) NOT NULL,
+  `father_occupation` varchar(150) NOT NULL,
+  `father_contact` varchar(20) NOT NULL,
+  `mother_name` varchar(150) NOT NULL,
+  `mother_occupation` varchar(150) NOT NULL,
+  `mother_contact` varchar(20) NOT NULL,
+  `guardian_name` varchar(150) NOT NULL,
+  `guardian_relation` varchar(100) NOT NULL,
+  `guardian_contact` varchar(20) NOT NULL,
+  `shs_name` varchar(255) DEFAULT NULL,
+  `shs_track` varchar(255) DEFAULT NULL,
+  `preferred_sched` varchar(50) DEFAULT NULL,
+  `year_level` varchar(20) NOT NULL,
+  `admission_type` enum('Freshman','Transferee') NOT NULL,
+  `consent` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
+  `status` enum('pending','approved','accepted','rejected') NOT NULL DEFAULT 'pending'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `freshman_enrollments`
+--
+
+INSERT INTO `freshman_enrollments` (`id`, `student_id`, `course_id`, `first_name`, `middle_name`, `last_name`, `suffix`, `birthdate`, `sex`, `civil_status`, `nationality`, `citizenship`, `place_of_birth`, `religion`, `email`, `mobile`, `region_code`, `province_code`, `city_code`, `barangay_code`, `region`, `province`, `city`, `barangay`, `address_line`, `zip`, `father_name`, `father_occupation`, `father_contact`, `mother_name`, `mother_occupation`, `mother_contact`, `guardian_name`, `guardian_relation`, `guardian_contact`, `shs_name`, `shs_track`, `preferred_sched`, `year_level`, `admission_type`, `consent`, `created_at`, `updated_at`, `status`) VALUES
+(1, '2025-00001', 1, 'Jarmaine', 'Pedwino', 'Diegas', '', '2004-01-10', 'Male', 'Single', 'Filipino', 'Filipino', 'Manila', 'Roman Catholic', 'diegas.jarmaine@gmail.com', '09123131231', '040000000', '042100000', '042103000', '042103034', 'CALABARZON', 'Cavite', 'City of Bacoor', 'Habay II', 'Habay', '4102', 'Tatay Diegas', 'Ewan', '09123131231', 'Nanay Diegas', 'Ewan', '09123131231', 'Ate Diegas', 'Sibling', '09123131231', 'Habay', 'TVL', 'Morning', '3rd Year', 'Transferee', 1, '2025-08-10 16:36:29', '2025-08-10 19:27:40', 'accepted');
 
 -- --------------------------------------------------------
 
@@ -396,6 +456,15 @@ ALTER TABLE `enrollments`
   ADD KEY `section_id` (`section_id`);
 
 --
+-- Indexes for table `freshman_enrollments`
+--
+ALTER TABLE `freshman_enrollments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_student_id` (`student_id`),
+  ADD KEY `idx_course_id` (`course_id`),
+  ADD KEY `idx_city_brg` (`city_code`,`barangay_code`);
+
+--
 -- Indexes for table `grades`
 --
 ALTER TABLE `grades`
@@ -487,6 +556,12 @@ ALTER TABLE `enrollments`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
+-- AUTO_INCREMENT for table `freshman_enrollments`
+--
+ALTER TABLE `freshman_enrollments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `grades`
 --
 ALTER TABLE `grades`
@@ -526,7 +601,7 @@ ALTER TABLE `sections`
 -- AUTO_INCREMENT for table `students`
 --
 ALTER TABLE `students`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `subjects`
@@ -550,6 +625,12 @@ ALTER TABLE `accountabilities`
 ALTER TABLE `enrollments`
   ADD CONSTRAINT `enrollments_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`),
   ADD CONSTRAINT `enrollments_ibfk_2` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`);
+
+--
+-- Constraints for table `freshman_enrollments`
+--
+ALTER TABLE `freshman_enrollments`
+  ADD CONSTRAINT `fk_fe_course_id` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `grades`
