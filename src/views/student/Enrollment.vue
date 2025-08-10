@@ -10,20 +10,25 @@ function getSectionNameById(section_id) {
 
 import { computed } from 'vue'
 
-// Group selectedIrregularSubjects by subject_code and section_id for preview
+// Group selectedIrregularSubjects by subject_code only (show one row even if Lec/Lab are in different sections)
 const groupedSelectedIrregularSubjects = computed(() => {
   const grouped = {}
   selectedIrregularSubjects.value.forEach(subj => {
-    const key = `${subj.subject_code}_${subj.section_id}`
+    const key = `${subj.subject_code}`
     if (!grouped[key]) {
       grouped[key] = {
         subject_code: subj.subject_code,
         subject_name: subj.subject_name,
-        section_id: subj.section_id,
-        section_name: subj.section_name,
+        section_id: null,
+        section_name: null,
         lec: null,
         lab: null
       }
+    }
+    // Prefer Lec section for display if available, otherwise keep existing or use current
+    if (!grouped[key].section_id || (subj.type === 'Lec' && grouped[key].lec === null)) {
+      grouped[key].section_id = subj.section_id
+      grouped[key].section_name = subj.section_name
     }
     if (subj.type === 'Lec') grouped[key].lec = subj
     if (subj.type === 'Lab') grouped[key].lab = subj
@@ -85,6 +90,54 @@ watch(enrollment, () => {
 
 onMounted(() => {
   fetchNotifications()
+  // Ensure section names are available for lookups in previews/tables
+  fetchAllSections()
+})
+
+// Flag: is current enrollment irregular? (case-insensitive)
+const isIrregular = computed(() => ((enrollment.value?.enrollment?.enrollment_type) || '').toLowerCase() === 'irregular')
+
+// Computed rows for registration table: group by subject/section for irregular
+const registrationDisplayRows = computed(() => {
+  const enr = enrollment.value
+  const rows = enr?.schedule || []
+  if (!isIrregular.value) return rows
+  const map = {}
+  rows.forEach((item) => {
+    const secId = item.section_id || null
+    const secName = item.section_name || (secId ? getSectionNameById(secId) : '')
+    const key = `${item.subject_code}_${secId || secName}`
+    if (!map[key]) {
+      map[key] = {
+        subject_code: item.subject_code || item.code,
+        subject_name: item.subject_name,
+        units: item.units,
+        section_id: secId,
+        section_name: secName,
+        room_name: item.room_name,
+        instructor: item.instructor || '',
+      }
+    }
+  })
+  return Object.values(map)
+})
+
+// For irregular: choose a single display section per subject_code (prefer Lec if available)
+const irregularSubjectSectionMap = computed(() => {
+  const map = {}
+  const rows = enrollment.value?.schedule || []
+  rows.forEach(item => {
+    const code = item.subject_code || item.code
+    const secName = item.section_name || (item.section_id ? getSectionNameById(item.section_id) : null)
+    if (!code || !secName) return
+    if (!map[code]) {
+      map[code] = secName
+    }
+    if (item.type === 'Lec') {
+      map[code] = secName
+    }
+  })
+  return map
 })
 
 // Format time as 12-hour with AM/PM
@@ -807,7 +860,13 @@ async function confirmEnroll() {
                 <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.day }}</td>
                 <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ formatTime(item.start_time) }}</td>
                 <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ formatTime(item.end_time) }}</td>
-                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ enrollment.section?.name || 'N/A' }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">
+                  {{
+                    isIrregular
+                      ? (irregularSubjectSectionMap[item.subject_code || item.code] || (item.section_name || (item.section_id ? getSectionNameById(item.section_id) : 'N/A')))
+                      : (enrollment.section?.name || 'N/A')
+                  }}
+                </td>
                 <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.room_name }}</td>
                 <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.instructor || '' }}</td>
               </tr>
@@ -1042,7 +1101,7 @@ async function confirmEnroll() {
         
         <!-- Right Side: Selected Subjects Preview -->
         <div class="w-80 flex flex-col min-h-0 h-full border-l pl-4">
-          <h4 class="font-medium mb-2 text-sm">Selected: ({{ selectedIrregularSubjects.length }})</h4>
+          <h4 class="font-medium mb-2 text-sm">Selected: ({{ groupedSelectedIrregularSubjects.length }})</h4>
           <div class="flex-1 overflow-y-auto">
             
             <div v-if="selectedIrregularSubjects.length > 0" class="space-y-1">
@@ -1050,32 +1109,31 @@ async function confirmEnroll() {
                    class="flex items-center justify-between p-2 bg-blue-50 rounded text-xs">
                 <div class="flex-1 min-w-0">
                   <div class="font-medium truncate">{{ group.subject_code }} - {{ group.subject_name }}</div>
-                  <div class="flex items-center gap-1 mt-0.5">
-                    <span class="text-gray-600 truncate" v-if="group.lec">
-  Section {{ getSectionNameById(group.lec.section_id) }}
-</span>
-<span class="text-gray-600 truncate" v-else-if="group.lab">
-  Section {{ getSectionNameById(group.lab.section_id) }}
-</span>
-                    <template v-if="group.lec">
-                      <span class="px-1 py-0.5 text-xs rounded bg-blue-100 text-blue-800">Lec</span>
-                      <span>{{ group.lec.day }} {{ formatTime(group.lec.start_time) }}-{{ formatTime(group.lec.end_time) }}</span>
-                      <button @click="toggleSubjectSelection(group.lec)"
-                              class="text-red-600 hover:text-red-800 text-xs px-1 py-1 rounded hover:bg-red-50 ml-2 flex-shrink-0"
-                              title="Remove Lec">
-                        ×
-                      </button>
-                    </template>
-                    <template v-if="group.lab">
-                      <span class="px-1 py-0.5 text-xs rounded bg-green-100 text-green-800">Lab</span>
-                      <span>{{ group.lab.day }} {{ formatTime(group.lab.start_time) }}-{{ formatTime(group.lab.end_time) }}</span>
-                      <button @click="toggleSubjectSelection(group.lab)"
-                              class="text-red-600 hover:text-red-800 text-xs px-1 py-1 rounded hover:bg-red-50 ml-2 flex-shrink-0"
-                              title="Remove Lab">
-                        ×
-                      </button>
-                    </template>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-gray-700 truncate">
+                      Section {{
+                        group.section_name
+                          || group.lec?.section_name
+                          || group.lab?.section_name
+                          || (group.section_id ? getSectionNameById(group.section_id) : (group.lec ? getSectionNameById(group.lec.section_id) : getSectionNameById(group.lab?.section_id)))
+                      }}
+                    </span>
                   </div>
+                  <div class="flex flex-wrap items-center gap-2 mt-1">
+                    <span v-if="group.lec" class="px-2 py-0.5 bg-white border rounded text-[10px] sm:text-xs text-gray-700">
+                      Lec: {{ group.lec.day }} {{ formatTime(group.lec.start_time) }} - {{ formatTime(group.lec.end_time) }}
+                    </span>
+                    <span v-if="group.lab" class="px-2 py-0.5 bg-white border rounded text-[10px] sm:text-xs text-gray-700">
+                      Lab: {{ group.lab.day }} {{ formatTime(group.lab.start_time) }} - {{ formatTime(group.lab.end_time) }}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex-shrink-0 ml-2">
+                  <button @click="removeSubjectSection(group.subject_code, group.section_name || (group.lec ? group.lec.section_name : group.lab?.section_name))"
+                          class="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50"
+                          title="Remove Section">
+                    Remove
+                  </button>
                 </div>
               </div>
             </div>
