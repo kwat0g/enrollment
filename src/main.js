@@ -16,29 +16,5 @@ const adminStore = useAdminStore()
 userStore.loadFromStorage()
 adminStore.loadFromStorage()
 
-// Register navigation guard after Pinia is ready
-router.beforeEach((to, from, next) => {
-  // Admin routes
-  if (to.path.startsWith('/admin')) {
-    if (!adminStore.token || !adminStore.admins || adminStore.admins.role !== 'admin') {
-      next('/@dminlogin-');
-    } else {
-      next();
-    }
-  }
-  // Student routes
-  else if (to.path.startsWith('/student')) {
-    if (!userStore.token || !userStore.user || userStore.user.role !== 'student') {
-      next('/login');
-    } else {
-      next();
-    }
-  }
-  // Other routes
-  else {
-    next();
-  }
-})
-
 app.use(router)
 app.mount('#app')

@@ -115,26 +115,36 @@
         <h3 class="text-xl font-bold mb-6 text-blue-900">Weekly Schedule for {{ selectedRoom?.name }}</h3>
         <div v-if="scheduleLoading" class="text-center py-6 text-gray-500">Loading schedule...</div>
         <div v-else>
-          <table v-if="roomSchedule.length > 0" class="min-w-full border text-xs sm:text-sm mb-4">
-            <thead class="bg-gray-100 text-gray-900">
-              <tr>
-                <th class="py-2 px-2 sm:px-4 text-center">Day</th>
-                <th class="py-2 px-2 sm:px-4 text-center">Start Time</th>
-                <th class="py-2 px-2 sm:px-4 text-center">End Time</th>
-                <th class="py-2 px-2 sm:px-4 text-center">Subject</th>
-                <th class="py-2 px-2 sm:px-4 text-center">Section</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="sched in roomSchedule" :key="sched.id">
-                <td class="py-2 px-2 sm:px-4 text-center">{{ sched.day }}</td>
-                <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime(sched.start_time) }}</td>
-                <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime(sched.end_time) }}</td>
-                <td class="py-2 px-2 sm:px-4 text-center">{{ sched.subject_name }}</td>
-                <td class="py-2 px-2 sm:px-4 text-center">{{ sched.section_name }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="roomSchedule.length > 0" class="max-h-[60vh] overflow-y-auto">
+            <div v-for="(scheds, section) in groupedRoomSchedules" :key="section" class="mb-3 border rounded">
+              <button type="button" @click="toggleSection(section)" class="w-full flex items-center justify-between px-3 py-2 bg-blue-50 hover:bg-blue-100">
+                <span class="font-semibold text-blue-900">Section: {{ section }}</span>
+                <span class="text-blue-900 text-xs">{{ expandedSections[section] ? '▲' : '▼' }}</span>
+              </button>
+              <div v-show="expandedSections[section]" class="p-2 overflow-x-auto">
+                <table class="min-w-full border text-xs sm:text-sm mb-2">
+                  <thead class="bg-gray-100 text-gray-900">
+                    <tr>
+                      <th class="py-2 px-2 sm:px-4 text-center">Day</th>
+                      <th class="py-2 px-2 sm:px-4 text-center">Start Time</th>
+                      <th class="py-2 px-2 sm:px-4 text-center">End Time</th>
+                      <th class="py-2 px-2 sm:px-4 text-center">Subject</th>
+                      <th class="py-2 px-2 sm:px-4 text-center">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="sched in scheds" :key="sched.id">
+                      <td class="py-2 px-2 sm:px-4 text-center">{{ sched.day }}</td>
+                      <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime(sched.start_time) }}</td>
+                      <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime(sched.end_time) }}</td>
+                      <td class="py-2 px-2 sm:px-4 text-center">{{ sched.subject_name }}</td>
+                      <td class="py-2 px-2 sm:px-4 text-center">{{ sched.type || sched.schedule_type || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
           <div v-else class="text-center text-gray-400 py-6">No schedules for this room.</div>
         </div>
         <button @click="closeScheduleModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
@@ -518,6 +528,32 @@ const showScheduleModal = ref(false)
 const selectedRoom = ref(null)
 const roomSchedule = ref([])
 const scheduleLoading = ref(false)
+
+// Group schedules by section for the View Schedule modal
+const expandedSections = ref({})
+const groupedRoomSchedules = computed(() => {
+  const groups = {}
+  for (const s of roomSchedule.value || []) {
+    const key = s.section_name || 'Unknown Section'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(s)
+  }
+  return groups
+})
+
+function toggleSection(section) {
+  expandedSections.value[section] = !expandedSections.value[section]
+}
+
+watch(roomSchedule, (list) => {
+  // Collapse all by default when schedule data changes
+  const next = {}
+  for (const s of list || []) {
+    const key = s.section_name || 'Unknown Section'
+    if (!(key in next)) next[key] = false
+  }
+  expandedSections.value = next
+})
 
 function openScheduleModal(room) {
   selectedRoom.value = room

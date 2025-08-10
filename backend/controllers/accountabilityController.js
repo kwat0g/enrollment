@@ -22,7 +22,8 @@ const getAllAccountabilities = async (req, res) => {
 
 // --- Admin: Create accountability ---
 const createAccountability = async (req, res) => {
-  const { student_id, type, description, status, amount } = req.body;
+  const { student_id, type, description, status } = req.body;
+  const amount = req.body.amount ?? 0;
   const requiredFields = [
     { key: 'student_id', label: 'Student' },
     { key: 'type', label: 'Type' },
@@ -34,10 +35,30 @@ const createAccountability = async (req, res) => {
       return res.status(400).json({ error: `${field.label} is required.` });
     }
   }
+
   try {
+    // Resolve student identifier: accept numeric students.id or string students.student_id
+    let resolvedStudentId = null;
+
+    // If numeric, use directly
+    if (String(student_id).trim() !== '' && !isNaN(Number(student_id))) {
+      resolvedStudentId = Number(student_id);
+      // Ensure student exists
+      const [check] = await db.query('SELECT id FROM students WHERE id = ?', [resolvedStudentId]);
+      if (!check.length) return res.status(400).json({ error: 'Student not found.' });
+    } else {
+      // Treat as string student_id (e.g., '2025-00001') and resolve to students.id
+      const [rows] = await db.query('SELECT id FROM students WHERE student_id = ?', [String(student_id)]);
+      if (!rows.length) return res.status(400).json({ error: 'Student not found.' });
+      resolvedStudentId = rows[0].id;
+    }
+
+    // Basic validation/coercion for amount
+    const amt = Number(amount) || 0;
+
     await db.query(
       'INSERT INTO accountabilities (student_id, type, description, status, amount) VALUES (?, ?, ?, ?, ?)',
-      [student_id, type, description, status, amount || 0]
+      [resolvedStudentId, type, description, status, amt]
     );
     res.json({ success: true });
   } catch (err) {

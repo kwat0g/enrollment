@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 // Import configuration
-const { db } = require('./config/database');
+const { db, testConnection } = require('./config/database');
 
 // Import middleware
 const { authStudent, authAdmin } = require('./middleware/auth');
@@ -20,11 +22,22 @@ const scheduleController = require('./controllers/scheduleController');
 const accountabilityController = require('./controllers/accountabilityController');
 const gradeController = require('./controllers/gradeController');
 const roomController = require('./controllers/roomController');
+const instructorController = require('./controllers/instructorController');
 
 const app = express();
 
 // CORS configuration
 app.use(cors());
+
+// Security middleware
+app.use(helmet());
+
+// Basic rate limiting (tune as needed)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+});
+app.use('/api', apiLimiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -59,16 +72,19 @@ app.get('/api/student/grades', authStudent, studentController.getGrades);
 app.get('/api/student/notifications', authStudent, studentController.getNotifications);
 app.post('/api/student/notifications/:id/read', authStudent, studentController.markNotificationAsRead);
 
+// Lightweight instructor lookup used by frontend; returns a display name
+app.get('/api/instructors/:id', authStudent, instructorController.getInstructor);
+
 // === ENROLLMENT ROUTES ===
 app.post('/api/student/enroll', authStudent, enrollmentController.submitEnrollment);
-app.get('/api/admin/enrollments', enrollmentController.getPendingEnrollments);
-app.post('/api/admin/enrollments/:id/approve', enrollmentController.approveEnrollment);
-app.post('/api/admin/enrollments/:id/reject', enrollmentController.rejectEnrollment);
+app.get('/api/admin/enrollments', authAdmin, enrollmentController.getPendingEnrollments);
+app.post('/api/admin/enrollments/:id/approve', authAdmin, enrollmentController.approveEnrollment);
+app.post('/api/admin/enrollments/:id/reject', authAdmin, enrollmentController.rejectEnrollment);
 
 // === IRREGULAR ENROLLMENT ROUTES ===
 app.get('/api/student/subjects/all-scheduled', authStudent, enrollmentController.getAllScheduledSubjects);
 app.post('/api/student/enroll/irregular', authStudent, enrollmentController.submitIrregularEnrollment);
-app.get('/api/admin/enrollments/:id/irregular-details', enrollmentController.getIrregularEnrollmentDetails);
+app.get('/api/admin/enrollments/:id/irregular-details', authAdmin, enrollmentController.getIrregularEnrollmentDetails);
 
 // === SECTION MANAGEMENT ROUTES ===
 app.get('/api/admin/sections', sectionController.getAllSections);
@@ -87,11 +103,11 @@ app.put('/api/admin/courses/:id', authAdmin, adminCourseController.updateCourse)
 app.delete('/api/admin/courses/:id', authAdmin, adminCourseController.deleteCourse);
 
 // === SUBJECT MANAGEMENT ROUTES ===
-app.get('/api/admin/subjects', subjectController.getSubjects);
-app.post('/api/admin/subjects', subjectController.createSubject);
-app.put('/api/admin/subjects/:id', subjectController.updateSubject);
-app.delete('/api/admin/subjects/:id', subjectController.deleteSubject);
-app.get('/api/admin/subjects/:id', subjectController.getSubject);
+app.get('/api/admin/subjects', authAdmin, subjectController.getSubjects);
+app.post('/api/admin/subjects', authAdmin, subjectController.createSubject);
+app.put('/api/admin/subjects/:id', authAdmin, subjectController.updateSubject);
+app.delete('/api/admin/subjects/:id', authAdmin, subjectController.deleteSubject);
+app.get('/api/admin/subjects/:id', authAdmin, subjectController.getSubject);
 
 // === SCHEDULE MANAGEMENT ROUTES ===
 app.post('/api/admin/sections/:sectionId/subjects', authAdmin, scheduleController.assignSubjectsToSection);
@@ -107,32 +123,32 @@ app.get('/api/admin/subjects/:subjectId/schedules/full', authAdmin, scheduleCont
 app.get('/api/admin/schedules', authAdmin, scheduleController.getAllSchedulesFull);
 
 // === STUDENT MANAGEMENT ROUTES ===
-app.get('/api/admin/students/next-id', adminStudentController.getNextStudentId);
-app.get('/api/admin/students', adminStudentController.getAllStudents);
-app.post('/api/admin/students', adminStudentController.createStudent);
-app.put('/api/admin/students/:student_id', adminStudentController.updateStudent);
-app.delete('/api/admin/students/:student_id', adminStudentController.deleteStudent);
+app.get('/api/admin/students/next-id', authAdmin, adminStudentController.getNextStudentId);
+app.get('/api/admin/students', authAdmin, adminStudentController.getAllStudents);
+app.post('/api/admin/students', authAdmin, adminStudentController.createStudent);
+app.put('/api/admin/students/:student_id', authAdmin, adminStudentController.updateStudent);
+app.delete('/api/admin/students/:student_id', authAdmin, adminStudentController.deleteStudent);
 
 // === ACCOUNTABILITY MANAGEMENT ROUTES ===
-app.get('/api/admin/accountabilities', accountabilityController.getAllAccountabilities);
-app.post('/api/admin/accountabilities', accountabilityController.createAccountability);
-app.put('/api/admin/accountabilities/:id', accountabilityController.updateAccountability);
-app.delete('/api/admin/accountabilities/:id', accountabilityController.deleteAccountability);
+app.get('/api/admin/accountabilities', authAdmin, accountabilityController.getAllAccountabilities);
+app.post('/api/admin/accountabilities', authAdmin, accountabilityController.createAccountability);
+app.put('/api/admin/accountabilities/:id', authAdmin, accountabilityController.updateAccountability);
+app.delete('/api/admin/accountabilities/:id', authAdmin, accountabilityController.deleteAccountability);
 app.post('/api/admin/accountabilities/:id/clear', authAdmin, accountabilityController.clearAccountability);
 
 // === GRADE MANAGEMENT ROUTES ===
-app.get('/api/admin/grades', gradeController.getAllGrades);
-app.post('/api/admin/grades', gradeController.createGrade);
-app.put('/api/admin/grades/:id', gradeController.updateGrade);
-app.delete('/api/admin/grades/:id', gradeController.deleteGrade);
-app.get('/api/admin/grades/statistics', gradeController.getGradeStatistics);
+app.get('/api/admin/grades', authAdmin, gradeController.getAllGrades);
+app.post('/api/admin/grades', authAdmin, gradeController.createGrade);
+app.put('/api/admin/grades/:id', authAdmin, gradeController.updateGrade);
+app.delete('/api/admin/grades/:id', authAdmin, gradeController.deleteGrade);
+app.get('/api/admin/grades/statistics', authAdmin, gradeController.getGradeStatistics);
 
 // === ROOM MANAGEMENT ROUTES ===
-app.get('/api/admin/rooms', roomController.getAllRooms);
+app.get('/api/admin/rooms', authAdmin, roomController.getAllRooms);
 app.post('/api/admin/rooms', authAdmin, roomController.createRoom);
 app.put('/api/admin/rooms/:id', authAdmin, roomController.updateRoom);
 app.delete('/api/admin/rooms/:id', authAdmin, roomController.deleteRoom);
-app.get('/api/admin/rooms/:id/schedules', roomController.getRoomSchedules);
+app.get('/api/admin/rooms/:id/schedules', authAdmin, roomController.getRoomSchedules);
 
 // === UTILITY ROUTES ===
 app.get('/api/test', (req, res) => {
@@ -152,6 +168,14 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
+// Test DB connection on startup (will exit on failure)
+try {
+  // Fire-and-forget: function exits process on failure
+  testConnection();
+} catch (e) {
+  console.error('Database connectivity check failed at startup:', e);
+}
 
 // Start server
 app.listen(PORT, () => {

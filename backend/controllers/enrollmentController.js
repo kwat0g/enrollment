@@ -9,6 +9,17 @@ const submitEnrollment = async (req, res) => {
   }
   try {
     const studentNumericId = await resolveStudentIdStrict(req.student.id);
+
+    // Block irregular enrollment if student has outstanding accountabilities
+    const [accCountRows] = await db.query(
+      `SELECT COUNT(*) AS cnt
+       FROM accountabilities
+       WHERE student_id = ? AND (status IS NULL OR status <> 'cleared')`,
+      [studentNumericId]
+    );
+    if (accCountRows[0]?.cnt > 0) {
+      return res.status(403).json({ error: 'You have outstanding accountabilities. Please settle them before enrolling.' });
+    }
     
     // Check if already enrolled for this term
     const [existing] = await db.query(

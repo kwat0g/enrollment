@@ -41,10 +41,16 @@ apiClient.interceptors.response.use(
     
     // Handle authentication errors
     if (error.response?.status === 401) {
-      // Clear stores and redirect to login
+      // Clear stores
       userStore.logout();
       adminStore.logout();
-      window.location.href = '/login';
+      // Determine redirect target based on request path
+      const reqUrl = error.config?.url || '';
+      const isAdminApi = /\/api\/admin\b/.test(reqUrl);
+      const target = isAdminApi ? '/@dminlogin-' : '/login';
+      if (window.location.pathname !== target) {
+        window.location.href = target;
+      }
     }
     
     // Handle server errors

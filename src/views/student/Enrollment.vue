@@ -745,7 +745,11 @@ async function confirmEnroll() {
       <div v-if="!enrollment || enrollment.enrollment === null">
         <div class="flex justify-between items-center mb-4">
           <h3 class="text-lg font-semibold">Available Sections</h3>
-          <button @click="openIrregularEnrollModal" class="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 transition font-semibold">
+          <button
+            v-if="!(accountabilities && accountabilities.some(a => a.status === 'pending'))"
+            @click="openIrregularEnrollModal"
+            class="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 transition font-semibold"
+          >
             Irregular Enrollment
           </button>
         </div>
@@ -792,7 +796,11 @@ async function confirmEnroll() {
             <button @click="openAvailableSectionsModal" class="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition font-semibold">
               Change Section
             </button>
-            <button @click="openIrregularEnrollModal" class="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition font-semibold">
+            <button
+              v-if="!(accountabilities && accountabilities.some(a => a.status === 'pending'))"
+              @click="openIrregularEnrollModal"
+              class="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition font-semibold"
+            >
               Irregular Enrollment
             </button>
           </div>
