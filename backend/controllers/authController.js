@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { db } = require('../config/database');
-const { JWT_SECRET } = require('../middleware/auth');
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../middleware/auth');
 
 // --- Login endpoint (fix: do not use resolveStudentIdStrict here, allow login by student_id string and last_name) ---
 const studentLogin = async (req, res) => {
@@ -31,7 +31,7 @@ const studentLogin = async (req, res) => {
         course_id: student.course_id,
       },
       JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: JWT_EXPIRES_IN }
     );
     res.json({
       token,
@@ -69,7 +69,7 @@ const adminLogin = async (req, res) => {
     const admin = rows[0];
     const isValid = await bcrypt.compare(password, admin.password);
     if (!isValid) return res.status(401).json({ error: 'Invalid credentials.' });
-    const token = jwt.sign({ id: admin.id, username: admin.username, role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: admin.id, username: admin.username, role: 'admin' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     res.json({ token, user: { id: admin.id, username: admin.username, role: 'admin' } });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
@@ -99,7 +99,7 @@ const refreshToken = async (req, res) => {
         course_id: decoded.course_id,
       },
       JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     res.json({ 

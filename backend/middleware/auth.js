@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = 'kwatog'; // Hardcoded for debug consistency
+// Read JWT configuration from environment variables with safe fallbacks for development
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-insecure-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 
 // --- Auth Middleware ---

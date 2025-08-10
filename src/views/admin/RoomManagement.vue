@@ -320,32 +320,33 @@ const timeSlots = [
   '5:00PM', '6:00PM', '7:00PM', '8:00PM', '9:00PM', '10:00PM'
 ]
 
-// Convert time string to minutes since midnight
+// Convert time string to minutes since midnight (handles 12h and 24h, with optional spaces/seconds)
 function toMinutes(t) {
-  if (!t) return NaN;
-  
-  // 12-hour format (e.g. 1:00PM)
-  const ampmMatch = t.match(/^(\d{1,2}):(\d{2})(AM|PM)$/i);
+  if (t == null) return NaN;
+  const raw = String(t);
+  const s = raw.trim().toUpperCase().replace(/\s+/g, '');
+
+  // 12-hour format (e.g., 1:00PM or 01:00PM)
+  let ampmMatch = s.match(/^(\d{1,2}):(\d{2})(AM|PM)$/);
   if (ampmMatch) {
-    let [ , h, m, ap ] = ampmMatch;
+    let [, h, m, ap] = ampmMatch;
     let hour = parseInt(h, 10);
-    if (ap.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-    if (ap.toUpperCase() === 'AM' && hour === 12) hour = 0;
-    return hour * 60 + parseInt(m, 10);
+    let minute = parseInt(m, 10);
+    if (ap === 'PM' && hour !== 12) hour += 12;
+    if (ap === 'AM' && hour === 12) hour = 0;
+    return hour * 60 + minute;
   }
-  
-  // 24-hour format with seconds (e.g. 13:00:00)
-  const time24Match = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+
+  // 24-hour format with optional seconds (e.g., 07:00, 13:00, 13:00:00)
+  let time24Match = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (time24Match) {
-    const [ , h, m ] = time24Match;
-    return parseInt(h, 10) * 60 + parseInt(m, 10);
+    let [, h, m] = time24Match;
+    const hour = parseInt(h, 10);
+    const minute = parseInt(m, 10);
+    if (isNaN(hour) || isNaN(minute)) return NaN;
+    return hour * 60 + minute;
   }
-  // 24-hour format (e.g. 13:00)
-  const h24Match = t.match(/^(\d{1,2}):(\d{2})$/);
-  if (h24Match) {
-    let [ , h, m ] = h24Match;
-    return parseInt(h, 10) * 60 + parseInt(m, 10);
-  }
+
   return NaN;
 }
 
@@ -448,20 +449,28 @@ function getRowSpan(day, timeIndex) {
 }
 
 function shouldShowSection(day, timeIndex) {
-  const time = timeSlots[timeIndex];
-  const schedule = getScheduleForSlot(day, time);
-  
-  // If no schedule or first time this section appears in the column
-  if (!schedule) return true;
-  
-  // Check if this is the first time slot for this section
-  if (timeIndex === 0) return true;
-  
-  const prevTime = timeSlots[timeIndex - 1];
-  const prevSchedule = getScheduleForSlot(day, prevTime);
-  
-  // Show if previous time slot has a different section or is available
-  return !prevSchedule || prevSchedule.section_name !== schedule.section_name;
+  const time = timeSlots[timeIndex]
+  const schedule = getScheduleForSlot(day, time)
+
+  // If no schedule at this slot, render an 'Available' cell
+  if (!schedule) return true
+
+  // Always show first row
+  if (timeIndex === 0) return true
+
+  const prevTime = timeSlots[timeIndex - 1]
+  const prevSchedule = getScheduleForSlot(day, prevTime)
+
+  // If previous slot is not booked, render a new cell here
+  if (!prevSchedule) return true
+
+  // Hide only when the previous slot is part of the SAME schedule block
+  // Determine sameness by section and exact time range (defensive against overlaps)
+  const sameSection = prevSchedule.section_name === schedule.section_name
+  const sameRange = String(prevSchedule.start_time) === String(schedule.start_time) &&
+                    String(prevSchedule.end_time) === String(schedule.end_time)
+
+  return !(sameSection && sameRange)
 }
 
 function isPartOfSection(day, timeIndex) {

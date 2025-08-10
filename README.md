@@ -1,35 +1,71 @@
-# .
+# Enrollment System (Vue 3 + Express + MySQL)
 
-This template should help get you started developing with Vue 3 in Vite.
+This is a full‑stack student enrollment system with a Vue 3 frontend and an Express/MySQL backend.
 
-## Recommended IDE Setup
+## Prerequisites
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- Node.js >= 16
+- MySQL server
 
-## Customize configuration
+## Backend Setup
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+1) Create a backend `.env` file from the example:
 
-## Project Setup
-
-```sh
-npm install
+```bash
+cp backend/.env.example backend/.env
 ```
 
-### Compile and Hot-Reload for Development
+2) Edit `backend/.env` and set your DB credentials and JWT settings:
 
-```sh
+```
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=ncst_enrollment1
+DB_PORT=3306
+
+# Use a strong secret in production
+JWT_SECRET=change_this_in_production
+JWT_EXPIRES_IN=1d
+
+PORT=5000
+```
+
+3) Install dependencies and start the backend:
+
+```bash
+cd backend
+npm install
+npm run dev    # or: npm start
+```
+
+## Frontend Setup
+
+1) Install dependencies at the project root and start Vite:
+
+```bash
+npm install
 npm run dev
 ```
 
-### Compile and Minify for Production
+The frontend expects the backend at `http://localhost:5000/api` by default. You can override with `VITE_API_BASE_URL` in a `.env` file at the project root, e.g.:
 
-```sh
-npm run build
+```
+VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## One‑command Dev (optional)
 
-```sh
-npm run lint
+From the project root, you can start both servers with:
+
+```bash
+npm run a
 ```
+
+This uses `concurrently` to run `vite` and the backend server together.
+
+## Notes
+
+- Authentication tokens (JWT) are signed with the backend `JWT_SECRET` and honor `JWT_EXPIRES_IN`.
+- Admin and Student areas are protected by route guards and backend middleware.
+- For Room schedules, the UI accepts both 12‑hour (e.g., `1:00PM`) and 24‑hour (`13:00` or `13:00:00`) formats.

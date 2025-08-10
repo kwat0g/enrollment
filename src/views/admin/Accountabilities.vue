@@ -232,31 +232,35 @@ function onFieldChange() {
 }
 
 async function saveAccountability() {
-  // Always set status to 'pending' if not set
-  if (!addForm.value.status) addForm.value.status = 'pending';
-  // Convert student_id to numeric id for backend foreign key
-  if (addForm.value.student_id && typeof addForm.value.student_id === 'string') {
-    const student = students.value.find(s => s.student_id === addForm.value.student_id);
-    if (student) addForm.value.student_id = student.id;
+  // Resolve numeric student id without mutating the form prematurely
+  const sid = addForm.value.student_id
+  let numericId = null
+  if (typeof sid === 'number') {
+    numericId = sid
+  } else if (typeof sid === 'string' && sid.trim()) {
+    const student = students.value.find(s => s.student_id === sid.trim())
+    numericId = student?.id ?? null
   }
-  // Always set status to 'pending' if not set
-  if (!addForm.value.status) addForm.value.status = 'pending';
-  if (!addForm.value.student_id) {
-    alert('Please select a student.');
-    return;
+
+  if (!Number.isInteger(numericId)) {
+    alert('Please select a valid student from the list.')
+    return
   }
-  if (!addForm.value.type) {
-    alert('Please select a type.');
-    return;
+
+  // Build payload to ensure correct types
+  const payload = {
+    student_id: numericId,
+    type: addForm.value.type,
+    description: addForm.value.description,
+    amount: addForm.value.type === 'Balance' ? Number(addForm.value.amount) : undefined,
+    status: addForm.value.status || 'pending',
   }
-  if (addForm.value.type === 'Document' && !addForm.value.description) {
-    alert('Please enter a document description.');
-    return;
+
+  if (payload.type === 'Balance' && (isNaN(payload.amount) || payload.amount === undefined)) {
+    alert('Amount is required and must be a number for Balance type.')
+    return
   }
-  if (addForm.value.type === 'Balance' && (!addForm.value.amount || !addForm.value.description)) {
-    alert('Please enter amount and description for Balance.');
-    return;
-  }
+
   try {
     const token = sessionStorage.getItem('admin_token')
     const res = await fetch('http://localhost:5000/api/admin/accountabilities', {
@@ -265,7 +269,7 @@ async function saveAccountability() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify(addForm.value)
+      body: JSON.stringify(payload)
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed to add accountability')
