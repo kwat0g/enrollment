@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 
 const courses = ref([])
 const yearLevels = [
+  { value: '1st', label: '1st Year' },
   { value: '2nd', label: '2nd Year' },
   { value: '3rd', label: '3rd Year' },
   { value: '4th', label: '4th Year' }

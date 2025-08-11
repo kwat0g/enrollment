@@ -284,6 +284,14 @@
             </select>
           </div>
         </div>
+        <div v-if="currentStep === 4" class="mb-3">
+          <label class="inline-flex items-start gap-2 text-sm text-gray-700">
+            <input type="checkbox" v-model="freshmanForm.consent" @change="clearValidationError" class="mt-1">
+            <span>
+              I confirm that the information provided is true and correct to the best of my knowledge.
+            </span>
+          </label>
+        </div>
 
         <!-- Step Navigation with centered indicator -->
         <div class="grid grid-cols-3 items-center mb-2">
@@ -554,6 +562,8 @@ const freshmanForm = ref({
   guardian_name: '', guardian_relation: '', guardian_contact: '',
   // Academic/Program
   shs_name: '', shs_track: '', preferred_sched: '', year_level: '', admission_type: 'Freshman',
+  // Consent
+  consent: false,
 })
 const originalStudentData = ref(null)
 const originalFreshmanData = ref(null)
@@ -633,7 +643,8 @@ const hasFreshmanChanges = computed(() => {
     f.preferred_sched !== o.preferred_sched ||
     f.year_level !== o.year_level ||
     f.admission_type !== o.admission_type ||
-    f.course_id !== o.course_id
+    f.course_id !== o.course_id ||
+    f.consent !== o.consent
   )
 })
 
@@ -696,6 +707,8 @@ const isFreshmanValid = computed(() => {
   const course = studentForm.value?.course_id || f.course_id
   if (!course) return false
   if (!(f.admission_type || '').trim()) return false
+  // Require consent checked for live validity
+  if (!f.consent) return false
   return true
 })
 
@@ -766,6 +779,7 @@ async function openAddModal() {
     mother_name: '', mother_occupation: '', mother_contact: '',
     guardian_name: '', guardian_relation: '', guardian_contact: '',
     shs_name: '', shs_track: '', preferred_sched: '', year_level: '', admission_type: 'Freshman',
+    consent: false,
   }
   // Fetch next student ID from backend
   try {
@@ -851,6 +865,21 @@ function saveStudent() {
             'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
           },
           body: JSON.stringify(payload)
+        }).then(async (r) => {
+          if (r.status === 404) {
+            // No existing freshman record; create one
+            const createPayload = { ...payload, student_id: studentForm.value.student_id }
+            return fetch('http://localhost:5000/api/admin/freshman-enrollments', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
+              },
+              body: JSON.stringify(createPayload)
+            })
+          }
+          if (!r.ok) throw new Error('Failed to update freshman details')
+          return r
         }).then(() => {
           showAddModal.value = false
           fetchStudents()
@@ -938,7 +967,7 @@ async function openEditModal(student) {
     email: student.email || '',
     mobile: student.contact_number || '',
     region_code: '', province_code: '', city_code: '', barangay_code: '',
-    region: '', province: '', city: '', barangay: '', address_line: '', zip: '',
+    region: '', province: '', city: '', barangay: '', address_line: student.address || '', zip: '',
     // Guardian
     father_name: '', father_occupation: '', father_contact: '',
     mother_name: '', mother_occupation: '', mother_contact: '',
@@ -1010,6 +1039,7 @@ async function openEditModal(student) {
         year_level: data.year_level || student.year_level || '',
         admission_type: data.admission_type || 'Freshman',
         course_id: data.course_id || student.course_id || '',
+        consent: !!data.consent,
       }
       originalFreshmanData.value = { ...freshmanForm.value }
     }
@@ -1136,8 +1166,7 @@ function acceptEnrollment(id) {
       showDetailsModal.value = false
       const code = data.student_code || data.student_id
       const dbid = data.student_db_id
-      notifMessage.value = code
-        'Enrollment accepted.'
+      notifMessage.value = 'Enrollment accepted.'
       showNotifModal.value = true
     })
     .catch(() => {
@@ -1284,6 +1313,6 @@ function loadCourses() {
 
 onMounted(() => {
   fetchStudents()
-  loadCourses()
+  fetchCourses()
 })
 </script>

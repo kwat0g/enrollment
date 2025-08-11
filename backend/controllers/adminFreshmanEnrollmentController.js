@@ -218,12 +218,12 @@ async function getFreshmanEnrollmentById(req, res) {
 module.exports.getFreshmanEnrollmentById = getFreshmanEnrollmentById;
 
 // GET /api/admin/freshman-enrollments/by-student/:student_id
-// Returns full record for a single approved student_id
+// Returns full record for a single student_id with status approved or accepted
 async function getFreshmanEnrollmentByStudentId(req, res) {
   try {
     await ensureStatusColumn();
-    const code = String(req.params.student_id || '').trim();
-    if (!code) return res.status(400).json({ error: 'Invalid student_id' });
+    const studentId = String(req.params.student_id || '').trim();
+    if (!studentId) return res.status(400).json({ error: 'Invalid student_id' });
     const [rows] = await db.query(
       `SELECT id,
               student_id,
@@ -243,7 +243,7 @@ async function getFreshmanEnrollmentByStudentId(req, res) {
               status,
               created_at, updated_at
          FROM freshman_enrollments
-        WHERE student_id = ? AND status = 'approved'
+        WHERE student_id = ? AND status IN ('approved','accepted')
         LIMIT 1`,
       [studentId]
     );
