@@ -47,10 +47,88 @@ const getAvailableSections = async (req, res) => {
         ...section,
         schedules: scheds
       };
+
     });
 
     res.json(sectionsWithSchedules);
   } catch (err) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+};
+
+// --- Admin: Get current enrollment/registration form for a specific student ---
+// Mirrors getCurrentEnrollment but resolves the target student from params and works under authAdmin
+const getCurrentEnrollmentForAdmin = async (req, res) => {
+  try {
+    const targetStudentId = req.params.studentId;
+    if (!targetStudentId) {
+      return res.status(400).json({ error: 'Missing studentId parameter.' });
+    }
+    // Resolve numeric id from either numeric or string-based student id
+    const studentNumericId = await resolveStudentIdStrict(targetStudentId);
+    // Get latest enrollment for this student
+    const [enrollments] = await db.query(
+      `SELECT * FROM enrollments WHERE student_id = ? ORDER BY id DESC LIMIT 1`,
+      [studentNumericId]
+    );
+    if (!enrollments.length || !['pending', 'approved'].includes(enrollments[0].status)) {
+      return res.json({ enrollment: null, section: null, schedule: [] });
+    }
+    const enrollment = enrollments[0];
+
+    let section = null;
+    let scheduleRows = [];
+
+    if (enrollment.enrollment_type === 'irregular') {
+      const [irregularSchedules] = await db.query(
+        `SELECT 
+          sc.*, 
+          sub.code as subject_code, 
+          sub.name as subject_name, 
+          sub.units, 
+          sub.type,
+          sc.instructor, 
+          r.name as room_name,
+          sec.name as section_name
+         FROM irregular_enrollments ie
+         JOIN schedules sc ON ie.schedule_id = sc.id
+         JOIN subjects sub ON ie.subject_id = sub.id
+         JOIN sections sec ON ie.section_id = sec.id
+         LEFT JOIN rooms r ON sc.room_id = r.id
+         WHERE ie.enrollment_id = ?`,
+        [enrollment.id]
+      );
+      scheduleRows = irregularSchedules;
+      const sectionNames = [...new Set(irregularSchedules.map(s => s.section_name))].join(', ');
+      section = {
+        id: null,
+        name: sectionNames || 'Mixed Sections',
+        schedule_type: 'irregular',
+        status: 'open'
+      };
+    } else {
+      if (enrollment.section_id) {
+        const [sectionRows] = await db.query(`SELECT * FROM sections WHERE id = ?`, [enrollment.section_id]);
+        section = sectionRows[0] || null;
+        const [regularSchedules] = await db.query(
+          `SELECT sc.*, sub.code as subject_code, sub.name as subject_name, sub.units, sub.type, sc.instructor, r.name as room_name
+           FROM schedules sc
+           JOIN subjects sub ON sc.subject_id = sub.id
+           LEFT JOIN rooms r ON sc.room_id = r.id
+           WHERE sc.section_id = ?`,
+          [enrollment.section_id]
+        );
+        scheduleRows = regularSchedules;
+      }
+    }
+
+    res.json({
+      enrollment,
+      section,
+      schedule: scheduleRows,
+    });
+  } catch (err) {
+    console.error('getCurrentEnrollmentForAdmin error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
 };
@@ -234,6 +312,7 @@ module.exports = {
   getAvailableSections,
   getAllAvailableSections,
   getCurrentEnrollment,
+  getCurrentEnrollmentForAdmin,
   getAccountabilities,
   getGrades,
   getNotifications,

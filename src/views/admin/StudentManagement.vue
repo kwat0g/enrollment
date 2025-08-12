@@ -48,7 +48,12 @@
           :style="{ top: actionMenuPos.y + 'px', left: actionMenuPos.x + 'px' }"
           @click.stop
         >
-          <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openAdminEnroll(actionMenuStudent)">Enroll</button>
+          <button
+            class="w-full text-center px-3 py-2 hover:bg-gray-50"
+            @click="openActionFor=null; (adminHasActiveEnrollment(actionMenuStudent) ? openViewRegForm(actionMenuStudent) : openAdminEnroll(actionMenuStudent))"
+          >
+            {{ adminHasActiveEnrollment(actionMenuStudent) ? 'View Reg Form' : 'Enroll' }}
+          </button>
           <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openDocumentsModal(actionMenuStudent)">Documents</button>
           <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openEditModal(actionMenuStudent)">Edit</button>
           <button class="w-full text-center px-3 py-2 text-red-600 hover:bg-red-50" @click="openActionFor=null; confirmDeleteStudent(actionMenuStudent)">Delete</button>
@@ -85,6 +90,183 @@
           <button :disabled="docsSaving" @click="saveDocuments" class="px-4 py-2 bg-blue-900 text-white rounded">{{ docsAfterSaveAction === 'accept' ? (docsSaving ? 'Saving...' : 'Save & Continue') : (docsSaving ? 'Saving...' : 'Save') }}</button>
         </div>
         <button @click="closeDocumentsModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- View Registration Form Modal -->
+    <div v-if="showRegFormModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-4xl relative">
+        <h3 class="text-xl font-bold mb-4 text-blue-900">Registration Form</h3>
+
+        <div v-if="regFormError" class="mb-3 p-2 bg-red-100 border border-red-300 text-red-700 rounded text-sm">{{ regFormError }}</div>
+        <div v-if="regFormLoading" class="text-gray-500 py-6 text-center">Loading registration form...</div>
+
+        <div v-else-if="selectedEnrollment" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500">Student</div>
+              <div class="text-gray-900 font-semibold">{{ selectedEnrollment.last_name }}, {{ selectedEnrollment.first_name }} {{ selectedEnrollment.middle_name || '' }}</div>
+              <div class="text-sm text-gray-700">ID: {{ selectedEnrollment.student_id }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500">Program</div>
+              <div class="text-gray-900 font-semibold">{{ (coursesMap[selectedEnrollment.course_id] && coursesMap[selectedEnrollment.course_id].name) || selectedEnrollment.course_id }}</div>
+              <div class="text-sm text-gray-700">Year Level: {{ selectedEnrollment.year_level }}</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500">Admission Type</div>
+              <div class="text-gray-900 font-medium">{{ selectedEnrollment.admission_type || '—' }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500">Status</div>
+              <div>
+                <span class="inline-block px-2 py-0.5 rounded text-xs"
+                      :class="{
+                        'bg-yellow-100 text-yellow-800': (selectedEnrollment.status || '').toLowerCase()==='pending' || (selectedEnrollment.status || '').toLowerCase()==='processing',
+                        'bg-emerald-100 text-emerald-800': (selectedEnrollment.status || '').toLowerCase()==='approved',
+                        'bg-gray-100 text-gray-800': !(selectedEnrollment.status)
+                      }">
+                  {{ (selectedEnrollment.status || '').toString() || 'N/A' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="border rounded-md mt-2">
+            <div class="bg-blue-50 text-blue-900 font-semibold px-3 py-2 rounded-t-md">Submitted Documents</div>
+            <div class="p-3">
+              <ul class="list-disc list-inside text-sm text-gray-800 space-y-1">
+                <li>PSA: <strong>{{ (selectedEnrollment.documents && (selectedEnrollment.documents.psa ?? false)) ? 'Yes' : 'To follow up' }}</strong></li>
+                <li>Form 138 (Freshman): <strong>{{ (selectedEnrollment.documents && (selectedEnrollment.documents.form138 ?? false)) ? 'Yes' : 'To follow up' }}</strong></li>
+                <li>Good Moral (Freshman): <strong>{{ (selectedEnrollment.documents && (selectedEnrollment.documents.good_moral ?? false)) ? 'Yes' : 'To follow up' }}</strong></li>
+                <li v-if="(selectedEnrollment.admission_type || '').toLowerCase()==='transferee'">TOR: <strong>{{ (selectedEnrollment.documents && (selectedEnrollment.documents.tor ?? false)) ? 'Yes' : 'To follow up' }}</strong></li>
+                <li v-if="selectedEnrollment.documents && selectedEnrollment.documents.notes">Notes: <span class="text-gray-600">{{ selectedEnrollment.documents.notes }}</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="border-t pt-3">
+            <div class="text-sm font-semibold text-gray-700 mb-2">Section & Schedule</div>
+            <div class="text-sm text-gray-800">
+              <div>Section: <strong>{{ selectedEnrollment.section_name || selectedEnrollment.section || '—' }}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex justify-end gap-2">
+          <button @click="closeRegFormModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold text-sm">Close</button>
+          <button
+            class="px-3 py-2 bg-blue-900 text-white rounded disabled:opacity-50 text-sm"
+            :disabled="!(selectedEnrollment && Array.isArray(selectedEnrollment.schedules) && selectedEnrollment.schedules.length)"
+            @click="openScheduleModal()"
+          >
+            Show Schedule
+          </button>
+        </div>
+
+        <button @click="closeRegFormModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Schedule Modal (from Registration Form) -->
+    <div v-if="showScheduleModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-4xl relative">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-xl font-bold text-blue-900">Student Schedule</h3>
+        </div>
+
+          <!-- Registration Form Header and Subject Table as one scrollable unit -->
+          <table class="min-w-[600px] w-full border text-xs sm:text-sm mb-4">
+            <tbody>
+              <tr>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Student No.</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ scheduleStudentInfo.student_no || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Last Name</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ selectedEnrollment.last_name || selectedEnrollment.lastname || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">First Name</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ selectedEnrollment.first_name || selectedEnrollment.firstname || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Middle Name</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ selectedEnrollment.middle_name || selectedEnrollment.middlename || '—' }}</td>
+              </tr>
+              <tr>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Address</td>
+                <td class="border px-2 py-1 whitespace-normal break-words" colspan="3">{{ scheduleStudentInfo.address || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Contact No.</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ scheduleStudentInfo.contact || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Gender</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ scheduleStudentInfo.gender || '—' }}</td>
+              </tr>
+              <tr>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Course</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ selectedCourseCode || selectedEnrollment.course_code || selectedEnrollment.course_id || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Year Level</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ selectedEnrollment.year_level || selectedEnrollment.year || '—' }}</td>
+                <td class="border px-2 py-1 font-semibold whitespace-normal break-words">Semester</td>
+                <td class="border px-2 py-1 whitespace-normal break-words" colspan="3">{{ scheduleStudentInfo.term || '1st Semester' }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+        <div v-if="!groupedSchedule || groupedSchedule.length === 0" class="text-gray-500 py-6 text-center">
+          No schedule available
+        </div>
+
+        <div v-else class="overflow-x-auto">
+          <table class="min-w-[600px] w-full border text-xs sm:text-sm mt-2">
+            <thead>
+              <tr class="bg-gray-50 text-gray-900">
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Code</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Description</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Units</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Type</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Days</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Start</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">End</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Section</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Room</th>
+                <th class="border px-2 py-1 text-center whitespace-normal break-words">Instructor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in (selectedEnrollment && Array.isArray(selectedEnrollment.schedules) ? selectedEnrollment.schedules : [])" :key="item.id">
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.subject_code || item.code }}</td>
+                <td class="border px-2 py-1 whitespace-normal break-words">{{ item.subject_name }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.units }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.type }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.day }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ formatTime(item.start_time) }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ formatTime(item.end_time) }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">
+                  {{
+                    item.section_name
+                      || (item.section_id ? getSectionNameById(item.section_id) : '')
+                      || selectedEnrollment.section_name
+                      || (selectedEnrollment.section_id ? getSectionNameById(selectedEnrollment.section_id) : 'N/A')
+                  }}
+                </td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.room_name }}</td>
+                <td class="border px-2 py-1 text-center whitespace-normal break-words">{{ item.instructor || '' }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td class="border px-2 py-1 text-right font-semibold whitespace-normal break-words" colspan="2">Total Units:</td>
+                <td class="border px-2 py-1 text-center font-bold whitespace-normal break-words">{{ ((selectedEnrollment && Array.isArray(selectedEnrollment.schedules)) ? selectedEnrollment.schedules : []).reduce((sum, item) => sum + (item.units || 0), 0) }}</td>
+                <td class="border px-2 py-1 whitespace-normal break-words" colspan="7"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button @click="printSchedule()" class="px-4 py-2 bg-gray-100 text-gray-800 rounded border hover:bg-gray-200 font-semibold text-sm">Print</button>
+          <button @click="closeScheduleModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold text-sm">Close</button>
+        </div>
+
+        <button @click="closeScheduleModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
 
@@ -868,6 +1050,30 @@ const irregularError = ref('')
 // Block section preview state
 const blockSchedules = ref([])
 const blockLoading = ref(false)
+
+// Helper: resolve section name by id from loaded adminAvailableSections or fallbacks
+function getSectionNameById(id) {
+  if (!id && id !== 0) return ''
+  const list = adminAvailableSections.value || []
+  const found = list.find(s => String(s.id) === String(id))
+  if (found) {
+    return (
+      found.name ||
+      found.section_name ||
+      found.code ||
+      found.section_code ||
+      `Section ${found.id}`
+    )
+  }
+  // Fallback: try from currently selected enrollment schedules if available
+  try {
+    const sel = selectedEnrollment && selectedEnrollment.value
+    const sched = Array.isArray(sel?.schedules) ? sel.schedules.find(sc => String(sc.section_id) === String(id)) : null
+    if (sched) return sched.section_name || sched.section_code || ''
+  } catch (_) {}
+  return 'N/A'
+}
+
 const blockError = ref('')
 const adminAllScheduledSubjects = ref([])
 // Selected irregular GROUP options: { key, subject_id, section_id, subject_code, subject_name, section_name, types:Set, rows:[schedule rows], instructors:string[] }
@@ -877,6 +1083,78 @@ const adminSelectedIrregular = ref([])
 const openActionFor = ref(null)
 const actionMenuPos = ref({ x: 0, y: 0 })
 const actionMenuStudent = ref(null)
+const actionMenuLoading = ref(false)
+// Cache of admin enrollment lookups: key by student PK id -> { has:boolean, data:{ enrollment, section, schedules } }
+const adminEnrollmentMap = ref({})
+
+// Ensure a student's current enrollment is fetched and cached for quick lookup in the action menu
+async function ensureAdminEnrollmentCached(student) {
+  try {
+    if (!student) return
+    const sidPk = student?.id
+    const sidStr = student?.student_id
+    if (!sidPk && !sidStr) return
+
+    // Avoid spamming: use short-lived cache (30s)
+    const cached = adminEnrollmentMap.value[sidPk]
+    if (cached && cached._ts && (Date.now() - cached._ts < 30_000)) return
+
+    actionMenuLoading.value = true
+    const token = sessionStorage.getItem('admin_token')
+    const headers = { 'Authorization': `Bearer ${token}` }
+
+    // Try a set of likely admin endpoints; stop at first successful response
+    const urls = []
+    if (sidStr) urls.push(`http://localhost:5000/api/admin/students/${encodeURIComponent(sidStr)}/enrollment`)
+    if (sidPk) urls.push(`http://localhost:5000/api/admin/students/${encodeURIComponent(String(sidPk))}/enrollment?by=pk=1`)
+    if (sidPk) urls.push(`http://localhost:5000/api/admin/enrollments/current?student_pk=${encodeURIComponent(String(sidPk))}`)
+    if (sidStr) urls.push(`http://localhost:5000/api/admin/enrollments/current?student_id=${encodeURIComponent(sidStr)}`)
+    if (sidStr) urls.push(`http://localhost:5000/api/student/enrollment?student_id=${encodeURIComponent(sidStr)}`)
+
+    let found = null
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { headers })
+        if (!res.ok) continue
+        const json = await res.json().catch(() => ({}))
+        if (!json || json.error) continue
+        found = json
+        break
+      } catch (_) { /* try next */ }
+    }
+
+    // Normalize shape
+    let enrollment = found?.enrollment || found?.enrollmentData || found?.enroll || null
+    let section = found?.section || found?.assigned_section || found?.blockSection || null
+    let schedules = found?.schedules || found?.schedule || found?.scheduleRows || found?.subjects || []
+    if (!Array.isArray(schedules)) schedules = schedules ? [schedules] : []
+
+    let has = false
+    const status = String(enrollment?.status || found?.status || '').toLowerCase()
+    if (enrollment) {
+      // Treat pending/processing/approved/accepted as active for viewing the reg form
+      has = ['pending', 'processing', 'approved', 'accepted'].includes(status) || !!section || schedules.length > 0
+    } else {
+      has = !!section || schedules.length > 0
+    }
+
+    adminEnrollmentMap.value[sidPk] = {
+      has,
+      data: { enrollment, section, schedules },
+      _ts: Date.now(),
+    }
+  } finally {
+    actionMenuLoading.value = false
+  }
+}
+
+// Boolean helper to determine if a student has an active/visible enrollment
+function adminHasActiveEnrollment(student) {
+  if (!student) return false
+  const sidPk = student?.id
+  const cached = adminEnrollmentMap.value[sidPk]
+  return !!(cached && cached.has)
+}
 
 // Block section preview modal state
 const showBlockPreviewModal = ref(false)
@@ -897,6 +1175,10 @@ function toggleActionMenu(id, evt) {
     actionMenuStudent.value = (students.value || []).find(s => String(s.id) === String(id)) || null
   } catch (_) {
     actionMenuStudent.value = null
+  }
+  // Ensure we have up-to-date enrollment status for this student
+  if (actionMenuStudent.value) {
+    ensureAdminEnrollmentCached(actionMenuStudent.value)
   }
   // Position near the button
   try {
@@ -2093,7 +2375,57 @@ const pendingEnrollments = ref([])
 const showDetailsModal = ref(false)
 const selectedEnrollment = ref(null)
 const detailsLoading = ref(false)
+// Mode of the details modal: '' | 'pending' | 'regView'
+const detailsMode = ref('')
+// When in regView mode, these hold the section and schedules from admin view endpoint
+const selectedSectionView = ref(null)
+const selectedSchedulesView = ref([])
 const coursesMap = ref({})
+
+// Resolve selected student's course name using available sources
+const selectedCourseName = computed(() => {
+  const enr = selectedEnrollment.value || {}
+  const cid = enr.course_id
+  // 1) Prefer direct map by course_id
+  if (cid != null) {
+    const hit = coursesMap.value[cid] || coursesMap.value[String(cid)]
+    if (hit && (hit.name || hit.code)) return hit.name || hit.code
+  }
+  // 2) Try to resolve by course_code against loaded courses list
+  const code = enr.course_code || ''
+  if (code && Array.isArray(courses?.value)) {
+    const codeLc = String(code).toLowerCase()
+    const found = courses.value.find(c => {
+      const c1 = String(c?.code || '').toLowerCase()
+      const c2 = String(c?.short_name || '').toLowerCase()
+      return c1 === codeLc || c2 === codeLc
+    })
+    if (found) return found.name || found.code || ''
+  }
+  // 3) Fallbacks from enrollment payload
+  return enr.course_name || enr.program || enr.course || ''
+})
+
+// Resolve selected student's course CODE using available sources
+const selectedCourseCode = computed(() => {
+  const enr = selectedEnrollment.value || {}
+  const cid = enr.course_id
+  // 1) Prefer code from coursesMap via course_id
+  if (cid != null) {
+    const hit = coursesMap.value[cid] || coursesMap.value[String(cid)]
+    if (hit && hit.code) return hit.code
+  }
+  // 2) Direct course_code from enrollment payload
+  if (enr.course_code) return enr.course_code
+  // 3) Try to infer by matching course_name/program to courses list
+  const nameGuess = enr.course_name || enr.program || enr.course || ''
+  if (nameGuess && Array.isArray(courses?.value)) {
+    const target = String(nameGuess).toLowerCase()
+    const found = courses.value.find(c => String(c?.name || '').toLowerCase() === target)
+    if (found && found.code) return found.code
+  }
+  return ''
+})
 
 // Processing enrollments state
 const showProcessingModal = ref(false)
@@ -2114,6 +2446,203 @@ watch(showTor, (visible) => {
     docsForm.value.tor = false
   }
 })
+
+// View Registration Form modal state
+const showRegFormModal = ref(false)
+const regFormLoading = ref(false)
+const regFormError = ref('')
+const regFormShowSchedule = ref(false)
+// Schedule modal state for Registration Form
+const showScheduleModal = ref(false)
+
+// Group selectedEnrollment.schedules similar to student-side formatting (combine Lec/Lab by subject)
+const groupedSchedule = computed(() => {
+  const enr = selectedEnrollment.value || null
+  const rows = Array.isArray(enr?.schedules) ? enr.schedules : []
+  if (!rows.length) return []
+  const bySubject = {}
+  rows.forEach((r) => {
+    const code = r.subject_code || r.code || ''
+    if (!code) return
+    if (!bySubject[code]) {
+      bySubject[code] = {
+        subject_code: code,
+        subject_name: r.subject_name || r.name || '',
+        section_id: r.section_id || null,
+        section_name: r.section_name || r.section || (selectedEnrollment.value?.section_name || selectedEnrollment.value?.section) || '',
+        lec: null,
+        lab: null,
+      }
+    }
+    const type = String(r.type || '').toLowerCase()
+    const entry = {
+      day: r.day,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      room: r.room,
+      room_name: r.room_name,
+      instructor: r.instructor,
+      instructor_name: r.instructor_name,
+      faculty_name: r.faculty_name,
+    }
+    if (type === 'lec' || type === 'lecture') bySubject[code].lec = entry
+    else if (type === 'lab' || type === 'laboratory') bySubject[code].lab = entry
+    else {
+      // Unknown type: treat as lec by default
+      if (!bySubject[code].lec) bySubject[code].lec = entry
+      else if (!bySubject[code].lab) bySubject[code].lab = entry
+    }
+  })
+  return Object.values(bySubject).sort((a, b) => a.subject_code.localeCompare(b.subject_code))
+})
+
+// Student details to display above schedule (mirror student-side)
+const scheduleStudentInfo = computed(() => {
+  const enr = selectedEnrollment.value || {}
+  const studentNo = enr.student_no || enr.student_number || enr.student_id || ''
+  const name = [enr.last_name || enr.lastname, enr.first_name || enr.firstname, enr.middle_name || enr.middlename]
+    .filter(Boolean)
+    .join(', ')
+  const program = enr.program || enr.course_name || enr.course || ''
+  const year = enr.year_level || enr.year || ''
+  const section = enr.section_name || enr.section || ''
+
+  // Freshman-enrollment prioritized fields
+  const gender = enr.sex || enr.gender || ''
+  const contact = enr.mobile || enr.contact_number || enr.contact || ''
+  // Compose address from freshman_enrollment fields when available
+  const addrLine = enr.address_line || enr.address || ''
+  const brgy = enr.barangay_name || enr.barangay || ''
+  const city = enr.city_name || enr.city || enr.municipality_name || enr.municipality || ''
+  const prov = enr.province_name || enr.province || ''
+  const region = enr.region_name || enr.region || ''
+  const zip = enr.zip || ''
+  const parts = [addrLine, brgy, city, prov, region].filter(p => (p || '').toString().trim().length > 0)
+  const address = parts.join(', ') + (zip ? ` ${zip}` : '')
+
+  // Semester/term prefer freshman_enrollment semester
+  const term = enr.semester || enr.term || enr.sy || ''
+
+  return {
+    student_no: (studentNo ?? '').toString(),
+    name: name || '',
+    program: program || '',
+    year_level: (year ?? '').toString(),
+    section: section || '',
+    term: (term ?? '').toString(),
+    gender: (gender ?? '').toString(),
+    contact: (contact ?? '').toString(),
+    address: address || '',
+  }
+})
+
+function openScheduleModal() {
+  if (!Array.isArray(selectedEnrollment.value?.schedules) || selectedEnrollment.value.schedules.length === 0) return
+  showScheduleModal.value = true
+}
+function closeScheduleModal() {
+  showScheduleModal.value = false
+}
+
+function printSchedule() {
+  // Mirror the current modal layout exactly
+  const rows = Array.isArray(selectedEnrollment.value?.schedules) ? selectedEnrollment.value.schedules : []
+  const info = scheduleStudentInfo.value
+  const win = window.open('', '_blank')
+  if (!win) return
+  const tableRows = rows.map(item => {
+    return `
+      <tr>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${item.subject_code || item.code || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;">${item.subject_name || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${item.units ?? ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${item.type || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${item.day || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${formatTime(item.start_time) || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${formatTime(item.end_time) || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${
+          item.section_name
+          || (item.section_id ? getSectionNameById(item.section_id) : '')
+          || selectedEnrollment.value?.section_name
+          || (selectedEnrollment.value?.section_id ? getSectionNameById(selectedEnrollment.value.section_id) : 'N/A')
+        }</td>
+        <td style="padding:6px;border:1px solid #ddd;text-align:center;">${item.room_name || ''}</td>
+        <td style="padding:6px;border:1px solid #ddd;">${item.instructor || ''}</td>
+      </tr>
+    `
+  }).join('')
+  const html = `
+    <html>
+    <head>
+      <title>Schedule</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 16px; }
+        h2 { margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 6px; font-size: 12px; }
+        thead { background: #f3f4f6; }
+      </style>
+    </head>
+    <body>
+      <h2>Student Schedule</h2>
+      <table style="margin-bottom:12px;">
+        <tbody>
+          <tr>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Student No.</td>
+            <td style="border:1px solid #ddd;padding:6px;">${info.student_no || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Last Name</td>
+            <td style="border:1px solid #ddd;padding:6px;">${(selectedEnrollment.value?.last_name || selectedEnrollment.value?.lastname) || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">First Name</td>
+            <td style="border:1px solid #ddd;padding:6px;">${(selectedEnrollment.value?.first_name || selectedEnrollment.value?.firstname) || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Middle Name</td>
+            <td style="border:1px solid #ddd;padding:6px;">${(selectedEnrollment.value?.middle_name || selectedEnrollment.value?.middlename) || ''}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Address</td>
+            <td style="border:1px solid #ddd;padding:6px;" colspan="3">${info.address || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Contact No.</td>
+            <td style="border:1px solid #ddd;padding:6px;">${info.contact || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Gender</td>
+            <td style="border:1px solid #ddd;padding:6px;">${info.gender || ''}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Course</td>
+            <td style="border:1px solid #ddd;padding:6px;">${selectedCourseCode.value || selectedEnrollment.value?.course_code || selectedEnrollment.value?.course_id || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Year Level</td>
+            <td style="border:1px solid #ddd;padding:6px;">${selectedEnrollment.value?.year_level || selectedEnrollment.value?.year || ''}</td>
+            <td style="border:1px solid #ddd;padding:6px;font-weight:600;">Semester</td>
+            <td style="border:1px solid #ddd;padding:6px;" colspan="3">${info.term || '1st Semester'}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Units</th>
+            <th>Type</th>
+            <th>Days</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Section</th>
+            <th>Room</th>
+            <th>Instructor</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  win.print()
+}
 
 function openDocumentsModal(enrollment, after = null) {
   docsError.value = ''
@@ -2136,6 +2665,193 @@ function openDocumentsModal(enrollment, after = null) {
     notes: docs.notes || ''
   }
   showDocsModal.value = true
+}
+
+// Open the View Registration Form modal for a student with an active enrollment
+async function openViewRegForm(student) {
+  if (!student) return
+  regFormError.value = ''
+  regFormShowSchedule.value = false
+  showRegFormModal.value = true
+  regFormLoading.value = true
+  try {
+    const sidPk = student?.id
+    const sidStr = student?.student_id
+    const cached = adminEnrollmentMap.value[sidPk]?.data || {}
+    const cachedEnrollment = cached.enrollment || null
+    const cachedSection = cached.section || null
+    const cachedSchedules = Array.isArray(cached.schedules) ? cached.schedules : []
+
+    // If we have an enrollment id, fetch full details from backend
+    if (cachedEnrollment?.id) {
+      // Prefer searching list first to avoid 404s when cached id is from regular enrollments table
+      let item = null
+      const tokenList = sessionStorage.getItem('admin_token')
+      const headers = { 'Authorization': `Bearer ${tokenList}` }
+      const urls = []
+      if (sidStr) {
+        urls.push(`http://localhost:5000/api/admin/freshman-enrollments?student_id=${encodeURIComponent(sidStr)}`)
+        urls.push(`http://localhost:5000/api/admin/freshman-enrollments?status=pending&student_id=${encodeURIComponent(sidStr)}`)
+        urls.push(`http://localhost:5000/api/admin/freshman-enrollments?status=processing&student_id=${encodeURIComponent(sidStr)}`)
+        urls.push(`http://localhost:5000/api/admin/freshman-enrollments?status=approved&student_id=${encodeURIComponent(sidStr)}`)
+        urls.push(`http://localhost:5000/api/admin/freshman-enrollments?status=accepted&student_id=${encodeURIComponent(sidStr)}`)
+      }
+      urls.push('http://localhost:5000/api/admin/freshman-enrollments')
+
+      let list = []
+      for (const u of urls) {
+        try {
+          const r = await fetch(u, { headers })
+          if (!r.ok) continue
+          const j = await r.json().catch(() => ([]))
+          if (Array.isArray(j)) { list = j; break }
+        } catch (_) { /* try next */ }
+      }
+      if (Array.isArray(list) && list.length) {
+        const acceptable = new Set(['pending','processing','approved','accepted'])
+        const fname = (student.first_name || student.firstName || '').trim().toLowerCase()
+        const lname = (student.last_name || student.lastName || '').trim().toLowerCase()
+        const email = (student.email || '').trim().toLowerCase()
+        const mobile = (student.mobile || student.contact_number || '').trim()
+        const filtered = list.filter(e => {
+          const st = String(e.status || '').toLowerCase()
+          if (!acceptable.has(st)) return false
+          const esid = e.student_id || e.studentNumber || e.student_no
+          if (sidStr && String(esid) === String(sidStr)) return true
+          // Fallback matching by name/email when student_id absent
+          const ef = (e.first_name || '').trim().toLowerCase()
+          const el = (e.last_name || '').trim().toLowerCase()
+          const ee = (e.email || '').trim().toLowerCase()
+          const em = (e.mobile || '').trim()
+          const nameMatch = ef === fname && el === lname
+          const contactMatch = (!!email && ee === email) || (!!mobile && em === mobile)
+          return nameMatch || contactMatch
+        })
+        filtered.sort((a,b) => {
+          const at = new Date(a.created_at || a.createdAt || 0).getTime()
+          const bt = new Date(b.created_at || b.createdAt || 0).getTime()
+          if (at !== bt) return bt - at
+          return (b.id || 0) - (a.id || 0)
+        })
+        item = filtered[0] || null
+      }
+
+      // If list search failed, attempt a direct by-id fetch (may 404 if id is from regular enrollments)
+      if (!item) {
+        const token = sessionStorage.getItem('admin_token')
+        const res = await fetch(`http://localhost:5000/api/admin/freshman-enrollments/${cachedEnrollment.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!res.ok) {
+          if (res.status === 401) throw new Error('Unauthorized. Please login again.')
+        } else {
+          const data = await res.json().catch(() => ({}))
+          if (data && !data.error) item = data
+        }
+      }
+
+      // If not found by either path, show minimal cached view
+      if (!item) {
+        // Still nothing; present cached minimal view to avoid blank modal
+        selectedEnrollment.value = {
+          student_id: student.student_id,
+          first_name: student.first_name,
+          middle_name: student.middle_name,
+          last_name: student.last_name,
+          status: cachedEnrollment?.status || '',
+          admission_type: cachedEnrollment?.admission_type || student.admission_type,
+          course_id: cachedEnrollment?.course_id || student.course_id,
+          year_level: cachedEnrollment?.year_level || student.year_level,
+          email: student.email,
+          mobile: student.mobile,
+          documents: {},
+          section_name: cachedSection?.name || cachedSection?.section_name,
+          section: cachedSection?.code || cachedSection?.name,
+          schedules: cachedSchedules
+        }
+        regFormError.value = 'Registration form not found for this student.'
+        regFormLoading.value = false
+        return
+      }
+
+      // Parse documents if string
+      let documents = {}
+      try {
+        if (item.documents) documents = typeof item.documents === 'string' ? JSON.parse(item.documents) : (item.documents || {})
+      } catch (_) { documents = {} }
+
+      selectedEnrollment.value = {
+        // Identity
+        student_id: item.student_id || student.student_id,
+        first_name: item.first_name || student.first_name,
+        middle_name: item.middle_name || student.middle_name,
+        last_name: item.last_name || student.last_name,
+        // Core enrollment
+        id: item.id || cachedEnrollment.id,
+        status: item.status || cachedEnrollment.status,
+        admission_type: item.admission_type || cachedEnrollment.admission_type,
+        course_id: item.course_id || cachedEnrollment.course_id || student.course_id,
+        year_level: item.year_level || cachedEnrollment.year_level,
+        // Contact
+        email: item.email || student.email,
+        mobile: item.mobile || student.mobile,
+        address_line: item.address_line || '',
+        barangay: item.barangay || '',
+        city: item.city || '',
+        province: item.province || '',
+        zip: item.zip || '',
+        // Parents/guardian
+        father_name: item.father_name,
+        mother_name: item.mother_name,
+        guardian_name: item.guardian_name,
+        guardian_relation: item.guardian_relation,
+        // Others
+        birthdate: item.birthdate,
+        sex: item.sex,
+        nationality: item.nationality,
+        religion: item.religion,
+        shs_name: item.shs_name,
+        shs_track: item.shs_track,
+        preferred_sched: item.preferred_sched,
+        // Documents and assignment
+        documents,
+        section_name: item.section_name || cachedSection?.name || cachedSection?.section_name,
+        section: item.section || cachedSection?.code || cachedSection?.name,
+        schedules: Array.isArray(item.schedules) ? item.schedules : (Array.isArray(item.schedule) ? item.schedule : cachedSchedules)
+      }
+      regFormLoading.value = false
+      return
+    }
+
+    // No enrollment id: still show what we have from cache + student details
+    selectedEnrollment.value = {
+      student_id: student.student_id,
+      first_name: student.first_name,
+      middle_name: student.middle_name,
+      last_name: student.last_name,
+      status: cachedEnrollment?.status || '',
+      admission_type: cachedEnrollment?.admission_type || student.admission_type,
+      course_id: cachedEnrollment?.course_id || student.course_id,
+      year_level: cachedEnrollment?.year_level || student.year_level,
+      email: student.email,
+      mobile: student.mobile,
+      documents: {},
+      section_name: cachedSection?.name || cachedSection?.section_name,
+      section: cachedSection?.code || cachedSection?.name,
+      schedules: cachedSchedules
+    }
+  } catch (e) {
+    regFormError.value = e?.message || 'Failed to open registration form.'
+  } finally {
+    regFormLoading.value = false
+  }
+}
+
+function closeRegFormModal() {
+  showRegFormModal.value = false
+  regFormLoading.value = false
+  regFormError.value = ''
+  regFormShowSchedule.value = false
 }
 
 function closeDocumentsModal() {
@@ -2263,6 +2979,7 @@ function viewEnrollment(e) {
   showDetailsModal.value = true
   detailsLoading.value = true
   selectedEnrollment.value = null
+  detailsMode.value = 'pending'
   fetch(`http://localhost:5000/api/admin/freshman-enrollments/${e.id}`, {
     headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
   })

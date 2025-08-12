@@ -73,6 +73,8 @@ app.post('/api/auth/refresh', authController.refreshToken);
 app.get('/api/student/sections', authStudent, studentController.getAvailableSections);
 app.get('/api/student/sections/all', authStudent, studentController.getAllAvailableSections);
 app.get('/api/student/enrollment', authStudent, studentController.getCurrentEnrollment);
+// Admin: fetch a student's current enrollment/registration form
+app.get('/api/admin/students/:studentId/enrollment', authAdmin, studentController.getCurrentEnrollmentForAdmin);
 app.get('/api/student/accountabilities', authStudent, studentController.getAccountabilities);
 app.get('/api/student/grades', authStudent, studentController.getGrades);
 app.get('/api/student/notifications', authStudent, studentController.getNotifications);
