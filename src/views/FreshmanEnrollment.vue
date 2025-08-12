@@ -57,7 +57,7 @@
               />
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Middle Name</label>
+              <label class="block text-gray-700 mb-1">Middle Name<span class="text-red-600">*</span></label>
               <input
                 v-model.trim="form.middle_name"
                 type="text"
@@ -75,7 +75,7 @@
               <input v-model="form.birthdate" type="date" class="w-full border rounded px-3 py-1.5 text-sm" required />
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Gender</label>
+              <label class="block text-gray-700 mb-1">Gender<span class="text-red-600">*</span></label>
               <select v-model="form.sex" class="w-full border rounded px-3 py-1.5 text-sm" required>
                 <option value="">-- Select --</option>
                 <option value="Male">Male</option>
@@ -84,7 +84,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Civil Status</label>
+              <label class="block text-gray-700 mb-1">Civil Status<span class="text-red-600">*</span></label>
               <select v-model="form.civil_status" class="w-full border rounded px-3 py-1.5 text-sm" required>
                 <option value="">-- Select --</option>
                 <option>Single</option>
@@ -110,11 +110,11 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Place of Birth</label>
+              <label class="block text-gray-700 mb-1">Place of Birth<span class="text-red-600">*</span> </label>
               <input v-model.trim="form.place_of_birth" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Religion</label>
+              <label class="block text-gray-700 mb-1">Religion<span class="text-red-600">*</span></label>
               <select v-model="form.religion" class="w-full border rounded px-3 py-1.5 text-sm">
                 <option value="">-- Select --</option>
                 <option>Roman Catholic</option>
@@ -161,7 +161,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Province<span class="text-red-600" v-if="provinces.length">*</span></label>
+              <label class="block text-gray-700 mb-1">Province<span class="text-red-600">*</span></label>
               <select v-model="form.province_code" class="w-full border rounded px-3 py-1.5 text-sm" :disabled="!provinces.length">
                 <option value="">-- Select Province --</option>
                 <option v-for="p in provinces" :key="p.code" :value="p.code">{{ p.name }}</option>
@@ -182,7 +182,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Address Line</label>
+              <label class="block text-gray-700 mb-1">Address Line<span class="text-red-600">*</span></label>
               <input v-model.trim="form.address_line" type="text" class="w-full border rounded px-3 py-1.5 text-sm" placeholder="House No., Street" required />
             </div>
             <div>
@@ -209,15 +209,15 @@
             <h4 class="text-sm font-semibold text-gray-700 mb-1">Father Information</h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
-                <label class="block text-gray-700 mb-1">Full Name</label>
+                <label class="block text-gray-700 mb-1">Full Name<span class="text-red-600">*</span></label>
                 <input v-model.trim="form.father_name" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Occupation</label>
+                <label class="block text-gray-700 mb-1">Occupation<span class="text-red-600">*</span></label>
                 <input v-model.trim="form.father_occupation" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Contact Number</label>
+                <label class="block text-gray-700 mb-1">Contact Number<span class="text-red-600">*</span></label>
                 <input
                   v-model.trim="form.father_contact"
                   type="tel"
@@ -236,15 +236,15 @@
             <h4 class="text-sm font-semibold text-gray-700 mb-1">Mother Information</h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
-                <label class="block text-gray-700 mb-1">Full Name</label>
+                <label class="block text-gray-700 mb-1">Full Name<span class="text-red-600">*</span></label>
                 <input v-model.trim="form.mother_name" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Occupation</label>
+                <label class="block text-gray-700 mb-1">Occupation<span class="text-red-600">*</span></label>
                 <input v-model.trim="form.mother_occupation" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Contact Number</label>
+                <label class="block text-gray-700 mb-1">Contact Number<span class="text-red-600">*</span></label>
                 <input
                   v-model.trim="form.mother_contact"
                   type="tel"
@@ -263,11 +263,11 @@
             <h4 class="text-sm font-semibold text-gray-700 mb-1">Guardian Information</h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
-                <label class="block text-gray-700 mb-1">Full Name</label>
+                <label class="block text-gray-700 mb-1">Full Name<span class="text-red-600">*</span></label>
                 <input v-model.trim="form.guardian_name" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Relationship</label>
+                <label class="block text-gray-700 mb-1">Relationship<span class="text-red-600">*</span></label>
                 <select v-model="form.guardian_relation" class="w-full border rounded px-3 py-1.5 text-sm">
                   <option value="">-- Select --</option>
                   <option>Grandparent</option>
@@ -277,7 +277,7 @@
                 </select>
               </div>
               <div>
-                <label class="block text-gray-700 mb-1">Contact Number</label>
+                <label class="block text-gray-700 mb-1">Contact Number<span class="text-red-600">*</span></label>
                 <input
                   v-model.trim="form.guardian_contact"
                   type="tel"
@@ -297,11 +297,11 @@
           <h3 class="text-lg font-semibold text-blue-900 mb-1">Academic Background</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <label class="block text-gray-700 mb-1">Senior High School Name</label>
+              <label class="block text-gray-700 mb-1">Senior High School Name<span class="text-red-600">*</span></label>
               <input v-model.trim="form.shs_name" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Track/Strand</label>
+              <label class="block text-gray-700 mb-1">Track/Strand<span class="text-red-600">*</span></label>
               <input v-model.trim="form.shs_track" type="text" class="w-full border rounded px-3 py-1.5 text-sm" />
             </div>
           </div>
@@ -319,7 +319,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Preferred Schedule</label>
+              <label class="block text-gray-700 mb-1">Preferred Schedule<span class="text-red-600">*</span></label>
               <select v-model="form.preferred_sched" class="w-full border rounded px-3 py-1.5 text-sm">
                 <option value="">-- Select --</option>
                 <option>Morning</option>
@@ -328,7 +328,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Admission Type</label>
+              <label class="block text-gray-700 mb-1">Admission Type<span class="text-red-600">*</span></label>
               <select v-model="form.admission_type" class="w-full border rounded px-3 py-1.5 text-sm">
                 <option value="">-- Select Type --</option>
                 <option>Freshman</option>
@@ -336,7 +336,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-gray-700 mb-1">Year Level</label>
+              <label class="block text-gray-700 mb-1">Year Level<span class="text-red-600">*</span></label>
               <select v-model="form.year" :disabled="form.admission_type==='Freshman'" class="w-full border rounded px-3 py-1.5 text-sm">
                 <option value="">-- Select Year --</option>
                 <option>1st Year</option>

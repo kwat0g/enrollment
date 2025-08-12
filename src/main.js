@@ -5,10 +5,14 @@ import { createPinia } from 'pinia'
 import './main.css'
 import { useUserStore } from '@/stores/user'
 import { useAdminStore } from '@/stores/admin'
+import SanitizeDirective from '@/directives/sanitize'
 
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
+
+// Register global input sanitization directive
+app.directive('sanitize', SanitizeDirective)
 
 // Restore session from sessionStorage before mounting
 const userStore = useUserStore()

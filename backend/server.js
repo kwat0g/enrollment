@@ -9,6 +9,7 @@ const { db, testConnection } = require('./config/database');
 
 // Import middleware
 const { authStudent, authAdmin } = require('./middleware/auth');
+const sanitize = require('./middleware/sanitize');
 
 // Import controllers
 const authController = require('./controllers/authController');
@@ -44,6 +45,9 @@ app.use('/api', apiLimiter);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Sanitize all incoming inputs (body, query, params)
+app.use(sanitize);
 
 // Simple request logging
 app.use((req, res, next) => {

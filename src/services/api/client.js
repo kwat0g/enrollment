@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useUserStore } from '@/stores/user';
 import { useAdminStore } from '@/stores/admin';
+import { sanitizeByType } from '@/utils/sanitize';
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -65,7 +66,25 @@ apiClient.interceptors.response.use(
 // API response wrapper for consistent error handling
 export const apiRequest = async (config) => {
   try {
-    const response = await apiClient(config);
+    // Shallow sanitize outgoing payloads
+    const cfg = { ...config };
+    if (cfg.data && typeof cfg.data === 'object') {
+      const sanitized = {};
+      for (const k of Object.keys(cfg.data)) {
+        const v = cfg.data[k];
+        sanitized[k] = typeof v === 'string' ? sanitizeByType(v, 'string') : v;
+      }
+      cfg.data = sanitized;
+    }
+    if (cfg.params && typeof cfg.params === 'object') {
+      const sanitizedP = {};
+      for (const k of Object.keys(cfg.params)) {
+        const v = cfg.params[k];
+        sanitizedP[k] = typeof v === 'string' ? sanitizeByType(v, 'string') : v;
+      }
+      cfg.params = sanitizedP;
+    }
+    const response = await apiClient(cfg);
     return { success: true, data: response.data };
   } catch (error) {
     const errorMessage = error.response?.data?.error || error.message || 'An error occurred';
