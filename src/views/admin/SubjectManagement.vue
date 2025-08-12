@@ -13,7 +13,10 @@ const selectedYear = ref('')
 const subjects = ref([])
 const loading = ref(false)
 const showAddModal = ref(false)
+const addCategory = ref('') // 'major' | 'minor'
 const showNotifModal = ref(false)
+const showWarnModal = ref(false)
+const warnMessage = ref('')
 const showConfirmModal = ref(false)
 const notifMessage = ref('')
 const confirmMessage = ref('')
@@ -54,7 +57,11 @@ async function fetchSubjects() {
     if (!res.ok) throw new Error(data.error || 'Failed to fetch subjects')
     subjects.value = data
   } catch (err) {
-    validationError.value = err.message
+    // Close any confirm modal first to avoid layering issues
+    showConfirmDeleteModal.value = false
+    warnMessage.value = err.message || 'Failed to fetch subjects.'
+    console.warn('[Subjects] Warning:', warnMessage.value)
+    showWarnModal.value = true
   } finally {
     loading.value = false
   }
@@ -64,6 +71,7 @@ function openAddModal() {
   isEditMode.value = false
   editingSubjectId.value = null
   validationError.value = ''
+  addCategory.value = ''
   newSubject.value = { code: '', name: '', units: '', type: '', course_id: selectedCourse.value, year_level: selectedYear.value }
   showAddModal.value = true
 }
@@ -88,6 +96,7 @@ function closeAddModal() {
   editingSubjectId.value = null
   validationError.value = ''
   originalSubjectData.value = null
+  addCategory.value = ''
 }
 
 async function openEditModal(subject) {
@@ -182,25 +191,35 @@ async function saveSubject() {
     const token = sessionStorage.getItem('admin_token')
     
     if (isEditMode.value) {
-      
-      const subjectData = {
-        code: newSubject.value.code,
-        name: newSubject.value.name,
-        units: newSubject.value.units
-      };
-      
-      // Update existing subject
-      const subjectRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(subjectData)
-      })
-      
-      const subjectResponseData = await subjectRes.json()
-      
-      if (!subjectRes.ok) throw new Error(subjectResponseData.error || 'Failed to update subject')
-      
-      // Update schedule data
+      // Group-aware update
+      if (editIsMajor.value) {
+        const items = editGroupItems.value
+        if (!items.length) throw new Error('Unable to resolve subject entries for this major code.')
+        // Update name for both Lec and Lab; code is locked for Major
+        const updates = items.map(it => fetch(`http://localhost:5000/api/admin/subjects/${it.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ name: newSubject.value.name })
+        }).then(r => r.json().then(d => ({ ok: r.ok, d }))))
+        const results = await Promise.all(updates)
+        const failed = results.find(r => !r.ok)
+        if (failed) throw new Error(failed.d?.error || 'Failed to update one of the major subject entries')
+      } else {
+        // Minor: allow code and name updates
+        if (!newSubject.value.code) {
+          validationError.value = 'Subject code is required for minor.'
+          return;
+        }
+        const subjectRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ code: newSubject.value.code, name: newSubject.value.name })
+        })
+        const subjectResponseData = await subjectRes.json()
+        if (!subjectRes.ok) throw new Error(subjectResponseData.error || 'Failed to update subject')
+      }
+
+      // Optional: schedule update remains tied to the representative id
       const scheduleData = {
         type: newSubject.value.type,
         day: newSubject.value.day,
@@ -208,7 +227,6 @@ async function saveSubject() {
         end_time: newSubject.value.end_time,
         room: newSubject.value.room
       };
-      
       const scheduleRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}/schedule`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -216,26 +234,50 @@ async function saveSubject() {
       })
       const scheduleResponseData = await scheduleRes.json()
       console.log('Schedule update response:', scheduleResponseData);
-      
       if (!scheduleRes.ok) throw new Error(scheduleResponseData.error || 'Failed to update subject schedule')
-      
-      console.log('=== END FRONTEND EDIT DEBUG ===');
+
       notifMessage.value = 'Subject updated successfully!'
       showNotifModal.value = true;
     } else {
-      // Add new subject
-      const subjectPayload = { ...newSubject.value };
+      // Add new subject with category flow
+      if (!addCategory.value) {
+        validationError.value = 'Please select Major or Minor.'
+        return;
+      }
+      if (!newSubject.value.name) {
+        validationError.value = 'Subject name is required.'
+        return;
+      }
+      const payload = {
+        category: addCategory.value,
+        name: newSubject.value.name,
+        course_id: newSubject.value.course_id,
+        year_level: newSubject.value.year_level
+      };
+      if (addCategory.value === 'minor') {
+        if (!newSubject.value.code) {
+          validationError.value = 'Subject code is required for minor.'
+          return;
+        }
+        payload.code = String(newSubject.value.code).trim()
+      }
       const res = await fetch('http://localhost:5000/api/admin/subjects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(subjectPayload)
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add subject')
-      notifMessage.value = 'Subject added successfully!'
+      // Show generated code and what was created
+      if (data && data.code) {
+        const created = Array.isArray(data.created) ? data.created.map(c => `${c.type}(${c.units})`).join(' + ') : ''
+        notifMessage.value = `Subject added successfully! Code: ${data.code}${created ? ` — Created: ${created}` : ''}`
+      } else {
+        notifMessage.value = 'Subject added successfully!'
+      }
     }
     
     showAddModal.value = false
@@ -251,39 +293,69 @@ async function saveSubject() {
   }
 }
 
-async function deleteSubject(id) {
-  subjectToDelete.value = id;
+async function deleteSubject(row) {
+  // Determine if this is a major group (both Lec and Lab exist) and collect ids to delete
+  const code = String(row?.code || '').toUpperCase()
+  const items = (subjects.value || []).filter(s => String(s.code || '').toUpperCase() === code)
+  const ids = items.map(i => i.id).filter(Boolean)
+  subjectToDelete.value = ids.length ? ids : (row?.id ? [row.id] : [])
   showConfirmDeleteModal.value = true;
 }
 
 async function confirmDeleteSubject() {
-  if (!subjectToDelete.value) return;
+  if (!subjectToDelete.value || subjectToDelete.value.length === 0) return;
   try {
     const token = sessionStorage.getItem('admin_token')
-    const res = await fetch(`http://localhost:5000/api/admin/subjects/${subjectToDelete.value}`, {
+    // Delete all collected ids (handles Major Lec+Lab)
+    // Be robust: backend may return empty body or text on error. Parse safely.
+    const deletes = subjectToDelete.value.map(id => fetch(`http://localhost:5000/api/admin/subjects/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to delete subject')
-    notifMessage.value = 'Subject deleted successfully!'
+    }).then(async (r) => {
+      let bodyText = ''
+      let data
+      try {
+        bodyText = await r.text()
+        data = bodyText ? JSON.parse(bodyText) : null
+      } catch (_) {
+        data = bodyText || null
+      }
+      return { ok: r.ok, status: r.status, d: data }
+    }))
+    const results = await Promise.all(deletes)
+    const failed = results.find(r => !r.ok)
+    if (failed) {
+      const raw = (failed.d && (failed.d.error || failed.d.message)) || (typeof failed.d === 'string' ? failed.d : '') || 'Failed to delete one or more subject entries'
+      console.warn('[Subjects] Delete failed details:', { failed, results })
+      const friendly = /assign|section|schedule|foreign key|in use/i.test(raw)
+        ? 'Cannot delete this subject because it is assigned to a section or schedule.'
+        : raw
+      // Close confirm, then show warning modal next tick to avoid overlay conflicts
+      showConfirmDeleteModal.value = false
+      warnMessage.value = friendly
+      // ensure any notif modal is closed
+      showNotifModal.value = false
+      setTimeout(() => { showWarnModal.value = true }, 0)
+      return
+    }
+    notifMessage.value = subjectToDelete.value.length > 1 ? 'Major subject (Lec+Lab) deleted successfully!' : 'Subject deleted successfully!'
     showNotifModal.value = true
     await fetchSubjects()
   } catch (err) {
     validationError.value = err.message
   } finally {
     showConfirmDeleteModal.value = false;
-    subjectToDelete.value = null;
+    subjectToDelete.value = [];
   }
 }
 
 function cancelDeleteSubject() {
   showConfirmDeleteModal.value = false;
-  subjectToDelete.value = null;
+  subjectToDelete.value = [];
 }
 
 function isModalOpen() {
-  return showAddModal.value || showNotifModal.value || showConfirmModal.value;
+  return showAddModal.value || showNotifModal.value || showConfirmModal.value || showWarnModal.value || showConfirmDeleteModal.value;
 }
 
 function confirmAction() {
@@ -341,6 +413,48 @@ function cancelSaveSubject() {
 onMounted(fetchCourses)
 
 watch([selectedCourse, selectedYear], fetchSubjects)
+
+// Merge Lec/Lab pairs into a single display row (Major) and mark single Lec as Minor
+const groupedSubjects = computed(() => {
+  const byCode = new Map()
+  for (const s of subjects.value || []) {
+    const code = String(s.code || '').toUpperCase()
+    if (!byCode.has(code)) {
+      byCode.set(code, { items: [], name: s.name, course_id: s.course_id, year_level: s.year_level })
+    }
+    byCode.get(code).items.push(s)
+  }
+  const rows = []
+  for (const [code, grp] of byCode.entries()) {
+    const types = new Set((grp.items || []).map(i => String(i.type || '').toLowerCase()))
+    const isMajor = types.has('lec') && types.has('lab') || grp.items.length > 1
+    // prefer Lec id if available for edit/delete actions
+    let chosen = grp.items.find(i => String(i.type || '').toLowerCase() === 'lec') || grp.items[0]
+    rows.push({
+      id: chosen?.id,
+      code,
+      name: grp.name,
+      subjectTypeLabel: isMajor ? 'Major' : 'Minor'
+    })
+  }
+  // Optional: sort by code
+  rows.sort((a, b) => a.code.localeCompare(b.code))
+  return rows
+})
+
+// Helpers for edit modal behavior
+const editGroupItems = computed(() => {
+  if (!isEditMode.value || !newSubject.value?.code) return []
+  const code = String(newSubject.value.code || '').toUpperCase()
+  return (subjects.value || []).filter(s => String(s.code || '').toUpperCase() === code)
+})
+
+const editIsMajor = computed(() => {
+  const items = editGroupItems.value
+  if (!items.length) return false
+  const types = new Set(items.map(i => String(i.type || '').toLowerCase()))
+  return (types.has('lec') && types.has('lab')) || items.length > 1
+})
 </script>
 
 <template>
@@ -359,6 +473,16 @@ watch([selectedCourse, selectedYear], fetchSubjects)
       </select>
       <button @click="openAddModal" :disabled="isModalOpen() || !selectedCourse || !selectedYear" class="bg-blue-900 text-white px-5 py-2 rounded font-semibold hover:bg-blue-800 transition disabled:opacity-50 w-full sm:w-auto">Add Subject</button>
     </div>
+
+    <!-- Warning Modal (match existing modal design) -->
+    <div v-if="showWarnModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto" aria-live="assertive">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative" role="alertdialog" aria-modal="true" aria-label="Warning">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">{{ warnMessage }}</div>
+        <button @click="showWarnModal = false" class="px-5 py-2 bg-yellow-400 text-blue-900 rounded font-bold shadow hover:bg-yellow-300 transition">OK</button>
+        <button @click="showWarnModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
     <div v-if="loading" class="text-center py-8 text-gray-500">Loading subjects...</div>
     <div v-else class="overflow-x-auto bg-white rounded-xl shadow-lg p-2 sm:p-6 w-full min-w-0 max-w-full">
       <table class="min-w-[600px] w-full border text-xs sm:text-sm mb-6">
@@ -366,23 +490,23 @@ watch([selectedCourse, selectedYear], fetchSubjects)
           <tr>
             <th class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">Code</th>
             <th class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">Name</th>
-            <th class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">Units</th>
+            <th class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">Subject Type</th>
             <th class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="subject in subjects" :key="subject.id" class="text-gray-900">
+          <tr v-for="subject in groupedSubjects" :key="subject.id || subject.code" class="text-gray-900">
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ subject.code }}</td>
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ subject.name }}</td>
-            <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ subject.units }}</td>
+            <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">{{ subject.subjectTypeLabel }}</td>
             <td class="py-2 px-2 sm:px-4 text-center whitespace-normal break-words">
               <div class="flex flex-col sm:flex-row gap-2 justify-center">
                 <button class="bg-yellow-400 text-blue-900 px-3 py-1 rounded hover:bg-yellow-300 font-semibold text-xs sm:text-sm" @click="openEditModal(subject)" :disabled="isModalOpen()">Edit</button>
-                <button class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold text-xs sm:text-sm" @click="deleteSubject(subject.id)" :disabled="isModalOpen()">Delete</button>
+                <button class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold text-xs sm:text-sm" @click="deleteSubject(subject)" :disabled="isModalOpen()">Delete</button>
               </div>
             </td>
           </tr>
-          <tr v-if="subjects.length === 0">
+          <tr v-if="groupedSubjects.length === 0">
             <td colspan="4" class="text-center text-gray-400 py-6">No subjects found for this course and year level.</td>
           </tr>
         </tbody>
@@ -401,28 +525,74 @@ watch([selectedCourse, selectedYear], fetchSubjects)
             {{ validationError }}
           </div>
           
+          <!-- Add/Edit Form Fields -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-            <div>
-              <label class="block text-gray-700 mb-1 font-semibold">Subject Code</label>
-              <input v-model="newSubject.code" placeholder="e.g. IT101" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            </div>
-            <div>
-              <label class="block text-gray-700 mb-1 font-semibold">Subject Name</label>
-              <input v-model="newSubject.name" placeholder="Subject Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            </div>
-            <div>
-              <label class="block text-gray-700 mb-1 font-semibold">Units</label>
-              <input v-model="newSubject.units" type="number" min="1" max="10" placeholder="Units" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            </div>
-            <div>
-              <label class="block text-gray-700 mb-1 font-semibold">Type</label>
-              <select v-model="newSubject.type" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="" disabled>Select Type</option>
-                <option value="Lec">Lecture</option>
-                <option value="Lab">Laboratory</option>
-              </select>
-            </div>
+            <!-- Edit Mode: grouped behavior -->
+            <template v-if="isEditMode">
+              <div>
+                <label class="block text-gray-700 mb-1 font-semibold">
+                  Subject Code
+                </label>
+                <input
+                  v-model="newSubject.code"
+                  :readonly="editIsMajor"
+                  :aria-readonly="editIsMajor ? 'true' : 'false'"
+                  placeholder="e.g. IT101"
+                  :title="editIsMajor ? 'Locked for Major (auto-managed). Edit subject name instead.' : ''"
+                  class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  :class="{ 'bg-gray-100 text-gray-700 cursor-not-allowed border-dashed': editIsMajor }"
+                />
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-semibold">Subject Name</label>
+                <input v-model="newSubject.name" placeholder="Subject Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-gray-700 mb-1 font-semibold">
+                  Subject Type
+                </label>
+                <div
+                  class="w-full border rounded px-3 py-2 bg-gray-100 text-gray-700 border-dashed cursor-not-allowed"
+                  title="Read-only"
+                  aria-readonly="true"
+                  role="textbox"
+                >
+                  {{ editIsMajor ? 'Major' : 'Minor' }}
+                </div>
+              </div>
+            </template>
 
+            <!-- Add Mode: choose Major/Minor then only name input -->
+            <template v-else>
+              <div class="sm:col-span-2">
+                <label class="block text-gray-700 mb-1 font-semibold">Subject Category</label>
+                <div class="flex gap-4 items-center">
+                  <label class="inline-flex items-center gap-2">
+                    <input type="radio" value="major" v-model="addCategory" />
+                    <span>Major</span>
+                  </label>
+                  <label class="inline-flex items-center gap-2">
+                    <input type="radio" value="minor" v-model="addCategory" />
+                    <span>Minor</span>
+                  </label>
+                </div>
+              </div>
+              <div v-if="addCategory === 'minor'">
+                <label class="block text-gray-700 mb-1 font-semibold">Subject Code</label>
+                <input v-model="newSubject.code" placeholder="Enter code (not like IT3NN)" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                <div class="text-xs text-gray-600 mt-1">Do not use codes that look like major auto-generated format (e.g., IT301).</div>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-gray-700 mb-1 font-semibold">Subject Name</label>
+                <input v-model="newSubject.name" placeholder="Subject Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              </div>
+              <div class="sm:col-span-2 text-xs text-gray-600" v-if="addCategory === 'major'">
+                Code, units, and types are auto-generated. System will create Lec(1 unit) and Lab(2 units).
+              </div>
+              <div class="sm:col-span-2 text-xs text-gray-600" v-else-if="addCategory === 'minor'">
+                Code is manual entry; system will create Lec (3 units).
+              </div>
+            </template>
           </div>
           <div class="flex gap-2 justify-end mt-4">
             <button @click="closeAddModal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Cancel</button>

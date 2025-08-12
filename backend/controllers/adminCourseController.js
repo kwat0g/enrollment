@@ -66,9 +66,19 @@ const updateCourse = async (req, res) => {
 const deleteCourse = async (req, res) => {
   try {
     const { id } = req.params;
+    // Prevent delete if any sections reference this course
+    const [rows] = await db.query('SELECT COUNT(*) AS cnt FROM sections WHERE course_id = ?', [id]);
+    if (rows && rows[0] && rows[0].cnt > 0) {
+      return res.status(409).json({ error: 'Cannot delete this course because it is used by one or more sections.' });
+    }
     await db.query('DELETE FROM courses WHERE id=?', [id]);
     res.json({ success: true });
   } catch (err) {
+    // Gracefully map FK errors from the DB driver if any slip through
+    if (err && (err.code === 'ER_ROW_IS_REFERENCED' || err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451)) {
+      return res.status(409).json({ error: 'Cannot delete this course because it is used by one or more sections.' });
+    }
+    console.error('deleteCourse error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
 };

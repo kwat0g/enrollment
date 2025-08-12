@@ -67,6 +67,16 @@
   </div>
 </div>
 
+    <!-- Warning Modal (blocked delete) -->
+    <div v-if="showWarnModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto" aria-live="assertive">
+      <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative" role="alertdialog" aria-modal="true" aria-label="Warning">
+        <svg class="w-10 h-10 text-yellow-400 mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mb-4 text-gray-800 text-base font-semibold">{{ warnMessage }}</div>
+        <button @click="showWarnModal = false" class="px-5 py-2 bg-yellow-400 text-blue-900 rounded font-bold shadow hover:bg-yellow-300 transition">OK</button>
+        <button @click="showWarnModal = false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
     <!-- Unsaved Changes Warning Modal -->
     <div v-if="showUnsavedWarningModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
       <div class="bg-white p-6 rounded-lg shadow-lg border-l-8 border-yellow-400 w-full max-w-sm text-center pointer-events-auto flex flex-col items-center relative">
@@ -111,6 +121,9 @@ const loading = ref(false)
 // Unsaved changes warning modal state
 const showUnsavedWarningModal = ref(false)
 const showSaveConfirmModal = ref(false)
+// Blocked-delete warning modal
+const showWarnModal = ref(false)
+const warnMessage = ref('')
 
 // Computed property to check if course data has changed
 const hasCourseChanges = computed(() => {
@@ -213,14 +226,31 @@ async function deleteCourse() {
       headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
     })
     if (!res.ok) {
-      const data = await res.json()
-      validationError.value = data.error || 'An error occurred.'
+      // Robustly parse body (may be empty or text)
+      let bodyText = ''
+      let data
+      try {
+        bodyText = await res.text()
+        data = bodyText ? JSON.parse(bodyText) : null
+      } catch (_) {
+        data = bodyText || null
+      }
+      const raw = (data && (data.error || data.message)) || (typeof data === 'string' ? data : '') || 'Failed to delete course.'
+      const friendly = /section|foreign key|in use|assigned/i.test(raw)
+        ? 'Cannot delete this course because it is used by one or more sections.'
+        : raw
+      // Close delete modal, show warning
+      showDeleteModal.value = false
+      warnMessage.value = friendly
+      showWarnModal.value = true
       return
     }
     closeDeleteModal()
     fetchCourses()
   } catch (err) {
-    validationError.value = 'An error occurred.'
+    showDeleteModal.value = false
+    warnMessage.value = 'Failed to delete course.'
+    showWarnModal.value = true
   }
 }
 

@@ -28,6 +28,111 @@ const getSubjects = async (req, res) => {
 // --- Admin: Add subject ---
 const createSubject = async (req, res) => {
   const { code, name, units, type, course_id, year_level } = req.body;
+  // Accept multiple aliases just in case frontend sends different key
+  let categoryRaw = (req.body.category ?? req.body.subject_category ?? req.body.kind);
+  if (typeof req.body.is_major === 'boolean') {
+    categoryRaw = req.body.is_major ? 'major' : 'minor';
+  }
+  const category = typeof categoryRaw === 'string' ? categoryRaw.trim().toLowerCase() : undefined;
+  // Debug log to trace branch selection
+  console.log('[createSubject] body:', req.body, 'resolved category:', category);
+
+  // Helper to map '1st'/'2nd'/'3rd'/'4th' -> '1'|'2'|'3'|'4'
+  const yearDigit = (yl) => {
+    if (!yl) return '';
+    const m = String(yl).match(/(1st|2nd|3rd|4th|\b[1-4]\b)/i);
+    if (!m) return '';
+    const v = m[0].toLowerCase();
+    if (v.startsWith('1')) return '1';
+    if (v.startsWith('2')) return '2';
+    if (v.startsWith('3')) return '3';
+    if (v.startsWith('4')) return '4';
+    return '';
+  };
+
+  // If a category is provided, we follow the new auto-creation flow
+  if (category === 'major' || category === 'minor') {
+    if (!name || !course_id || !year_level) {
+      return res.status(400).json({ error: 'Name, course_id and year_level are required.' });
+    }
+    try {
+      // Fetch course code
+      const [[courseRow]] = await db.query('SELECT code FROM courses WHERE id = ?', [course_id]);
+      if (!courseRow) return res.status(400).json({ error: 'Invalid course_id.' });
+      const courseCode = String(courseRow.code || '').toUpperCase();
+      // Prefix: last two letters of course code (letters only)
+      const letters = courseCode.replace(/[^A-Z]/g, '');
+      const prefix = letters.slice(-2) || letters || 'SB';
+      const yd = yearDigit(year_level);
+      if (!yd) return res.status(400).json({ error: 'Invalid year_level format.' });
+
+      // Find next sequence NN for code like PREFIX + Y + NN (e.g., IT301)
+      const likePattern = `${prefix}${yd}%`;
+      const [rows] = await db.query(
+        'SELECT code FROM subjects WHERE course_id = ? AND year_level = ? AND code LIKE ?',[course_id, year_level, likePattern]
+      );
+      let maxSeq = 0;
+      const re = new RegExp(`^${prefix}${yd}(\\d{2})$`);
+      for (const r of rows) {
+        const m = String(r.code).toUpperCase().match(re);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq) maxSeq = n;
+        }
+      }
+      const nextSeq = String(maxSeq + 1).padStart(2, '0');
+      const genCode = `${prefix}${yd}${nextSeq}`;
+
+      if (category === 'major') {
+        // Create Lec(1) and Lab(2) in a transaction
+        const conn = await db.getConnection();
+        try {
+          await conn.beginTransaction();
+          await conn.query('INSERT INTO subjects (code, name, units, type, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?)',
+            [genCode, String(name).trim(), 1, 'Lec', course_id, year_level]);
+          await conn.query('INSERT INTO subjects (code, name, units, type, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?)',
+            [genCode, String(name).trim(), 2, 'Lab', course_id, year_level]);
+          await conn.commit();
+          conn.release();
+          return res.json({ success: true, code: genCode, created: [{ type: 'Lec', units: 1 }, { type: 'Lab', units: 2 }] });
+        } catch (e) {
+          try { await conn.rollback(); } catch (_) {}
+          try { conn.release(); } catch (_) {}
+          return res.status(500).json({ error: e.message || 'Failed to create major subject.' });
+        }
+      } else {
+        // Minor: admin must provide code, must NOT look like a major code
+        const providedCode = (req.body.code || '').toString().trim().toUpperCase();
+        if (!providedCode) {
+          return res.status(400).json({ error: 'Subject code is required for minor subjects.' });
+        }
+        // Reject codes that match the major auto-generated pattern for this course/year (e.g., IT301)
+        const majorLikeRe = new RegExp(`^${prefix}${yd}\\d{2}$`);
+        if (majorLikeRe.test(providedCode)) {
+          return res.status(400).json({ error: `Subject code '${providedCode}' is reserved for major subjects. Please use a different code format for minor.` });
+        }
+        // Ensure no duplicate with type Lec for same course/year and code
+        const [exists] = await db.query('SELECT id FROM subjects WHERE code = ? AND type = ? AND course_id = ? AND year_level = ?', [providedCode, 'Lec', course_id, year_level]);
+        if (exists.length) {
+          return res.status(400).json({ error: `Subject code '${providedCode}' already exists.` });
+        }
+        await db.query('INSERT INTO subjects (code, name, units, type, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?)',
+          [providedCode, String(name).trim(), 3, 'Lec', course_id, year_level]);
+        return res.json({ success: true, code: providedCode, created: [{ type: 'Lec', units: 3 }] });
+      }
+    } catch (err) {
+      console.error('createSubject(category flow) error:', err, 'body:', req.body);
+      return res.status(500).json({ error: err.message || 'Server error.' });
+    }
+  }
+
+  // Fallback: preserve existing explicit creation behavior
+  // If neither category nor explicit fields are present, guide the client
+  if (!category && (!code || !type || !units)) {
+    return res.status(400).json({
+      error: 'Please select subject category (major/minor) and provide name, course_id, year_level — or send explicit code, type, units.'
+    });
+  }
   const requiredFields = [
     { key: 'code', label: 'Subject code' },
     { key: 'name', label: 'Subject name' },
@@ -38,11 +143,11 @@ const createSubject = async (req, res) => {
   ];
   for (const field of requiredFields) {
     if (!req.body[field.key] || (field.key === 'units' && (isNaN(Number(req.body.units)) || Number(req.body.units) <= 0))) {
+      console.error('createSubject(explicit) missing field:', field.label, 'body:', req.body);
       return res.status(400).json({ error: `${field.label} is required.` });
     }
   }
   try {
-    // Check for duplicate code with same type
     const [existing] = await db.query('SELECT * FROM subjects WHERE code = ? AND type = ? AND course_id = ? AND year_level = ?', [code.toString().trim(), type.toString().trim(), course_id, year_level]);
     if (existing.length > 0) {
       return res.status(400).json({ error: `Subject code '${code}' already exists with type '${type}'. Please use a different code or type.` });

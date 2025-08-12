@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { cloneDeep } from 'lodash'
 const showScheduleModal = ref(false)
 const pendingSchedules = ref([])
@@ -72,6 +72,92 @@ const showEditSubjectModal = ref(false)
 const editSubjectSchedule = ref({})
 const originalPendingSchedules = ref([]) // Track original schedule data for change detection
 
+// Grouped view of available subjects: merge Lec+Lab by code
+const editSubjectOptionsGrouped = computed(() => {
+  const byCode = {}
+  for (const s of editSubjectOptions.value) {
+    if (!byCode[s.code]) byCode[s.code] = { code: s.code, name: s.name, items: [], subjectIds: [], group: false }
+    byCode[s.code].items.push(s)
+    byCode[s.code].subjectIds.push(s.id)
+  }
+  return Object.values(byCode).map(g => ({ ...g, group: g.items.some(i => i.type === 'Lec') && g.items.some(i => i.type === 'Lab') }))
+})
+
+function isGroupAssigned(group) {
+  return group.subjectIds.some(id => editSelectedSubjectIds.value.includes(id))
+}
+
+// Assign both Lec and Lab items for a major subject group
+async function assignGroupSubjects(group) {
+  try {
+    // Prepare two pending schedule entries (lec + lab)
+    const items = group.items
+    pendingSchedules.value = items.map(item => ({
+      subject_id: item.id,
+      code: item.code,
+      name: item.name,
+      type: item.type,
+      day: '',
+      start_time: '',
+      end_time: '',
+      room: '',
+      instructor: ''
+    }))
+
+    // Store section context
+    subjectAssignSectionId.value = editSection.value.id
+
+    // Ensure rooms loaded and open schedule modal
+    await fetchRooms()
+    await nextTick()
+    originalPendingSchedules.value = cloneDeep(pendingSchedules.value)
+    showScheduleModal.value = true
+  } catch (err) {
+    notifMessage.value = err.message || 'Failed to prepare schedules for this subject.'
+    showNotifModal.value = true
+  }
+}
+
+// Open schedule modal pre-populated with both Lec and Lab for the group
+async function openScheduleModalForSubjectGroup(sectionId, group) {
+  try {
+    // Ensure rooms loaded
+    if (rooms.value.length === 0) await fetchRooms()
+
+    // Collect current schedules for both subject IDs if they exist
+    const items = group.items
+    const entries = []
+    for (const it of items) {
+      const sched = editSubjectSchedules.value.find(s => s.subject_id == it.id)
+      // Map room: prefer existing room name; else map from room_id
+      const mappedRoom = sched?.room
+        ? sched.room
+        : (sched?.room_id
+            ? (rooms.value.find(r => r.id == sched.room_id)?.name || '')
+            : '')
+      entries.push({
+        subject_id: it.id,
+        code: it.code,
+        name: it.name,
+        type: it.type,
+        day: sched?.day || '',
+        start_time: sched?.start_time || '',
+        end_time: sched?.end_time || '',
+        room: mappedRoom,
+        instructor: sched?.instructor || ''
+      })
+    }
+    pendingSchedules.value = entries
+    subjectAssignSectionId.value = sectionId
+    await nextTick()
+    originalPendingSchedules.value = cloneDeep(pendingSchedules.value)
+    showScheduleModal.value = true
+  } catch (err) {
+    notifMessage.value = err.message || 'Failed to open schedule editor for this subject.'
+    showNotifModal.value = true
+  }
+}
+
 async function openScheduleModalForSubject(sectionId, subjectId) {
   try {
     // Find the subject's current schedule data from already loaded data
@@ -79,7 +165,8 @@ async function openScheduleModalForSubject(sectionId, subjectId) {
     const subjectData = editSubjectOptions.value.find(s => s.id == subjectId)
     
     if (!subjectData) {
-      showNotification('Subject not found')
+      notifMessage.value = 'Subject not found'
+      showNotifModal.value = true
       return
     }
     
@@ -95,9 +182,6 @@ async function openScheduleModalForSubject(sectionId, subjectId) {
       const roomMatch = rooms.value.find(r => r.id == scheduleData.room_id)
       if (roomMatch) {
         roomName = roomMatch.name
-      } else {
-        // Fallback: use room_id as string
-        roomName = scheduleData.room_id.toString()
       }
     }
     
@@ -767,11 +851,13 @@ async function fetchAssignedSubjects(sectionId) {
 // Refactor saveEditSection to ensure the schedule modal is always shown for new subjects and backend is only called after modal is completed
 async function saveEditSection() {
   if (subjectEditBlocked.value === 'approved') {
-    showNotification('Cannot edit section: students are already enrolled in this section for the current term.');
+    notifMessage.value = 'Cannot edit section: students are already enrolled in this section for the current term.'
+    showNotifModal.value = true
     return;
   }
   if (subjectEditBlocked.value === 'pending') {
-    showNotification('Cannot edit section:  pending enrollment in this section for the current term.');
+    notifMessage.value = 'Cannot edit section:  pending enrollment in this section for the current term.'
+    showNotifModal.value = true
     return;
   }
   if (!hasEditChanges()) {
@@ -1024,19 +1110,58 @@ const mobileDropdownOpen = ref(null)
 const showRoomSchedulesModal = ref(false)
 const roomSchedules = ref([])
 const roomSchedulesTitle = ref('')
+// Filter by section within room/day modal
+const roomSchedulesSectionFilter = ref('All')
+const roomSchedulesSections = computed(() => {
+  const set = new Set()
+  for (const s of roomSchedules.value || []) {
+    if (s.section_name) set.add(s.section_name)
+  }
+  return ['All', ...Array.from(set).sort()]
+})
+const filteredRoomSchedules = computed(() => {
+  const sel = roomSchedulesSectionFilter.value
+  if (!sel || sel === 'All') return roomSchedules.value || []
+  return (roomSchedules.value || []).filter(s => s.section_name === sel)
+})
+// Grouped view by Section (like Room Management modal)
+const roomModalExpandedSections = ref({})
+const roomModalGroupedSchedules = computed(() => {
+  const groups = {}
+  for (const s of roomSchedules.value || []) {
+    const key = s.section_name || 'Unknown'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(s)
+  }
+  return groups
+})
+function toggleRoomModalSection(section) {
+  roomModalExpandedSections.value[section] = !roomModalExpandedSections.value[section]
+}
 
 async function showRoomSchedules(room, day) {
   if (!room) return
   try {
     const token = sessionStorage.getItem('admin_token')
-    let url = `http://localhost:5000/api/admin/rooms/${encodeURIComponent(room)}/schedules`
+    // Resolve room id and display name from provided value (can be id, name, or object)
+    const r = rooms.value.find(x => x.id === room || x.name === room || (room && x.name === room.name) || (room && x.id === room.id))
+    const roomId = r ? r.id : (room?.id ?? room)
+    const roomName = r ? r.name : (room?.name ?? room)
+    let url = `http://localhost:5000/api/admin/rooms/${encodeURIComponent(roomId)}/schedules`
     if (day) url += `?day=${encodeURIComponent(day)}`
-    
+
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
     const data = await res.json()
-    
+
     roomSchedules.value = data
-    roomSchedulesTitle.value = `${room}${day ? ' - ' + day : ''}`
+    roomSchedulesTitle.value = `${roomName}${day ? ' - ' + day : ''}`
+    roomSchedulesSectionFilter.value = 'All'
+    // initialize expanded sections (all expanded by default)
+    const exp = {}
+    for (const s of data || []) {
+      if (s.section_name) exp[s.section_name] = true
+    }
+    roomModalExpandedSections.value = exp
     showRoomSchedulesModal.value = true
   } catch (err) {
     console.error('Show room schedules error:', err)
@@ -1098,14 +1223,14 @@ async function autoGenerateSchedules() {
     }
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    const token = sessionStorage.getItem('adminToken')
+    const token = sessionStorage.getItem('admin_token')
     
     // Get all existing schedules to avoid conflicts
     const existingSchedules = []
     for (const room of rooms.value) {
       for (const day of days) {
         try {
-          const res = await fetch(`http://localhost:5000/api/admin/rooms/${encodeURIComponent(room.name)}/schedules?day=${encodeURIComponent(day)}`, {
+          const res = await fetch(`http://localhost:5000/api/admin/rooms/${encodeURIComponent(room.id)}/schedules?day=${encodeURIComponent(day)}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
           const schedules = await res.json()
@@ -1290,6 +1415,15 @@ function confirmUnassignSubject(sectionId, subjectId) {
   showUnassignConfirmModal.value = true
 }
 
+// Function to trigger confirm modal for a subject group (may include LEC and/or LAB)
+function confirmUnassignSubjectGroup(sectionId, subjectIds) {
+  // Normalize and de-duplicate IDs
+  const ids = Array.from(new Set((subjectIds || []).map(id => String(id))))
+  if (ids.length === 0) return
+  subjectToUnassign.value = { sectionId, subjectIds: ids }
+  showUnassignConfirmModal.value = true
+}
+
 // Function to actually unassign after confirmation
 async function unassignSubjectAfterConfirm() {
   if (!subjectToUnassign.value) return
@@ -1302,7 +1436,7 @@ async function unassignSubjectAfterConfirm() {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const enrollments = await enrollmentRes.json()
-      
+        
       if (enrollments.length > 0) {
         showUnassignConfirmModal.value = false
         subjectToUnassign.value = null
@@ -1311,27 +1445,31 @@ async function unassignSubjectAfterConfirm() {
         return
       }
     }
-    
-    const token = sessionStorage.getItem('admin_token')
-    const res = await fetch(`http://localhost:5000/api/admin/sections/${subjectToUnassign.value.sectionId}/subjects/${subjectToUnassign.value.subjectId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      // If the error is about section being open, close the confirmation modal and show error
-      if (data.error && data.error.includes('section is currently open')) {
-        showUnassignConfirmModal.value = false
-        subjectToUnassign.value = null
-        notifMessage.value = data.error
-        showNotifModal.value = true
-        return
-      }
-      throw new Error(data.error || 'Failed to unassign subject')
-    }
-    
-    // Store the section ID before clearing the subjectToUnassign
+    // Handle single or multiple unassign
     const sectionId = subjectToUnassign.value.sectionId
+    const idsToRemove = subjectToUnassign.value.subjectIds && subjectToUnassign.value.subjectIds.length
+      ? subjectToUnassign.value.subjectIds
+      : [subjectToUnassign.value.subjectId]
+
+    const token = sessionStorage.getItem('admin_token')
+    for (const sid of idsToRemove) {
+      const res = await fetch(`http://localhost:5000/api/admin/sections/${sectionId}/subjects/${sid}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        // If the error is about section being open, close the confirmation modal and show error
+        if (data.error && data.error.includes('section is currently open')) {
+          showUnassignConfirmModal.value = false
+          subjectToUnassign.value = null
+          notifMessage.value = data.error
+          showNotifModal.value = true
+          return
+        }
+        throw new Error(data.error || 'Failed to unassign subject')
+      }
+    }
     
     showUnassignConfirmModal.value = false
     subjectToUnassign.value = null
@@ -1605,6 +1743,29 @@ async function fetchRooms() {
   }
 }
 
+// Guarded opener for the Room Schedules modal from schedule editor rows
+function showRoomSchedulesGuard(subject) {
+  try {
+    if (!subject.room && !subject.day) {
+      notifMessage.value = 'Please select a room and a day first.'
+      showNotifModal.value = true
+      return
+    } else if (!subject.room) {
+      notifMessage.value = 'Please select a room first.'
+      showNotifModal.value = true
+      return
+    } else if (!subject.day) {
+      notifMessage.value = 'Please select a day first.'
+      showNotifModal.value = true
+      return
+    }
+    showRoomSchedules(subject.room, subject.day)
+  } catch (err) {
+    notifMessage.value = err.message || 'Failed to open room schedules.'
+    showNotifModal.value = true
+  }
+}
+
 function formatTime12h(time) {
   if (!time) return '';
   const [h, m] = time.split(':');
@@ -1865,46 +2026,49 @@ function confirmInstructorWarning() {
             </div>
             <div v-if="editSubjectOptions.length === 0" class="text-gray-500 mb-2">No subjects available for this course and year level.</div>
             <div v-else class="flex flex-col gap-2 overflow-y-auto h-[280px] pr-2 bg-gray-50 border border-gray-200 rounded p-4">
-              <div v-for="subject in editSubjectOptions" :key="subject.id" class="flex items-center justify-between p-3 border rounded" :class="[
-                isSubjectAssigned(subject.id) ? 'bg-gray-100 border-black' : 'bg-white border-gray-300',
-                showBulkAssignMode && !isSubjectAssigned(subject.id) && isBulkSelected(subject.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+              <div v-for="subject in editSubjectOptionsGrouped" :key="subject.code" class="flex items-center justify-between p-3 border rounded" :class="[
+                isGroupAssigned(subject) ? 'bg-gray-100 border-black' : 'bg-white border-gray-300'
               ]">
                 <div class="flex items-center gap-2 flex-1">
-                  <!-- Bulk selection checkbox -->
-                  <input 
-                    v-if="showBulkAssignMode && !isSubjectAssigned(subject.id)"
-                    type="checkbox"
-                    :checked="isBulkSelected(subject.id)"
-                    @change="toggleBulkSubjectSelection(subject.id)"
-                    class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
+                  <!-- Bulk selection checkbox (disabled for grouped for now) -->
                   <div class="flex-1">
                     <div class="text-sm font-semibold">{{ subject.code }} - {{ subject.name }}</div>
-                    <div class="text-xs text-gray-600">{{ subject.units }} units{{ subject.type ? ` (${subject.type.toUpperCase()})` : '' }}</div>
-                    <div v-if="isSubjectAssigned(subject.id)" class="text-xs text-red-600 mt-1">
-                      {{ formatCompactSchedule(getSubjectSchedule(subject.id)) }}
+                    <div class="text-xs text-gray-600">
+                      <template v-if="subject.group">Major (LEC + LAB)</template>
+                      <template v-else>{{ subject.items[0].units }} units ({{ subject.items[0].type?.toUpperCase() || 'LEC' }})</template>
+                    </div>
+                    <div v-if="isGroupAssigned(subject)" class="text-xs text-red-600 mt-1 space-y-0.5">
+                      <!-- Show compact schedules for both Lec and Lab if assigned -->
+                      <template v-for="it in subject.items" :key="it.id">
+                        <div v-if="editSelectedSubjectIds.includes(it.id)">
+                          <span class="font-semibold">{{ (it.type || '').toUpperCase() }}:</span>
+                          {{ formatCompactSchedule(getSubjectSchedule(it.id)) }}
+                        </div>
+                      </template>
                     </div>
                   </div>
                 </div>
                 <div class="flex gap-1 ml-2" v-if="!showBulkAssignMode">
                   <button 
-                    v-if="isSubjectAssigned(subject.id)"
-                    @click="openScheduleModalForSubject(editSection.id, subject.id)"
-                    class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold">
+                    v-if="isGroupAssigned(subject)"
+                    @click="openScheduleModalForSubjectGroup(editSection.id, subject)"
+                    class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold"
+                  >
                     Change Sched
                   </button>
-                  <button 
-                    v-if="isSubjectAssigned(subject.id)"
-                    @click="confirmUnassignSubject(editSection.id, subject.id)"
-                    :disabled="editSection.status === 'open'"
-                    :class="editSection.status === 'open' ? 'px-2 py-1 bg-gray-400 text-gray-600 rounded text-xs cursor-not-allowed' : 'px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold'">
-                    {{ editSection.status === 'open' ? 'Section Open' : 'Unassign' }}
+                  <button
+                    v-if="isGroupAssigned(subject)"
+                    @click="confirmUnassignSubjectGroup(editSection.id, subject.items.filter(it => editSelectedSubjectIds.includes(it.id)).map(it => it.id))"
+                    class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold"
+                  >
+                    Unassign
                   </button>
                   <button 
-                    v-if="!isSubjectAssigned(subject.id)"
-                    @click="assignSingleSubject(subject.id)"
+                    v-if="!isGroupAssigned(subject)"
+                    @click="subject.group ? assignGroupSubjects(subject) : assignSingleSubject(subject.subjectIds[0])"
                     :disabled="editSection.status === 'open'"
-                    :class="editSection.status === 'open' ? 'px-2 py-1 bg-gray-400 text-gray-600 rounded text-xs cursor-not-allowed' : 'px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold'">
+                    :class="editSection.status === 'open' ? 'px-2 py-1 bg-gray-400 text-gray-600 rounded text-xs cursor-not-allowed' : 'px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold'"
+                  >
                     {{ editSection.status === 'open' ? 'Section Open' : 'Assign' }}
                   </button>
                 </div>
@@ -2022,17 +2186,7 @@ function confirmInstructorWarning() {
               <input v-model="subject.instructor" placeholder="Instructor Name" class="border rounded px-2 py-1" />
             </div>
             <div class="flex flex-col gap-1">
-              <button @click="() => { 
-  if (!subject.room && !subject.day) { 
-    showNotification('Please select a room and a day first.');
-  } else if (!subject.room) { 
-    showNotification('Please select a room first.');
-  } else if (!subject.day) { 
-    showNotification('Please select a day first.');
-  } else { 
-    showRoomSchedules(subject.room, subject.day); 
-  } 
-}" class="mt-1 text-xs text-blue-600 hover:underline">Show Room Schedules</button>
+              <button @click="showRoomSchedulesGuard(subject)" class="mt-1 text-xs text-blue-600 hover:underline">Show Room Schedules</button>
             </div>
           </div>
         </div>
@@ -2062,21 +2216,38 @@ function confirmInstructorWarning() {
 
     <!-- Room Schedules Modal -->
     <div v-if="showRoomSchedulesModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-50 pointer-events-auto">
-      <div class="bg-white p-6 rounded-lg shadow-2xl border border-gray-200 w-full max-w-md pointer-events-auto relative">
+      <div class="bg-white p-6 rounded-lg shadow-2xl border border-gray-200 w-full max-w-2xl pointer-events-auto relative">
         <h3 class="text-xl font-bold mb-6 text-blue-900">{{ roomSchedulesTitle }}</h3>
-        <div v-if="roomSchedules.length === 0" class="text-gray-500 mb-4">No schedules found for this room and day.</div>
-        <div v-else class="mb-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-          <div v-for="(sched, idx) in roomSchedules" :key="idx" class="border rounded p-3 flex flex-col gap-2">
-            <div class="font-semibold text-blue-900">
-              {{ sched.subject_code }} - {{ sched.subject_name }} ({{ sched.section_name }})
-            </div>
-            <div class="text-xs text-gray-600">
-              Day: {{ sched.day }}, Start: {{ formatTime12h(sched.start_time) }}, End: {{ formatTime12h(sched.end_time) }}
+        <div v-if="roomSchedules.length === 0" class="text-center text-gray-400 py-6">No schedules for this room.</div>
+        <div v-else class="max-h-[60vh] overflow-y-auto">
+          <div v-for="(scheds, section) in roomModalGroupedSchedules" :key="section" class="mb-3 border rounded">
+            <button type="button" @click="toggleRoomModalSection(section)" class="w-full flex items-center justify-between px-3 py-2 bg-blue-50 hover:bg-blue-100">
+              <span class="font-semibold text-blue-900">Section: {{ section }}</span>
+              <span class="text-blue-900 text-xs">{{ roomModalExpandedSections[section] ? '▲' : '▼' }}</span>
+            </button>
+            <div v-show="roomModalExpandedSections[section]" class="p-2 overflow-x-auto">
+              <table class="min-w-full border text-xs sm:text-sm mb-2">
+                <thead class="bg-gray-100 text-gray-900">
+                  <tr>
+                    <th class="py-2 px-2 sm:px-4 text-center">Day</th>
+                    <th class="py-2 px-2 sm:px-4 text-center">Start Time</th>
+                    <th class="py-2 px-2 sm:px-4 text-center">End Time</th>
+                    <th class="py-2 px-2 sm:px-4 text-center">Subject</th>
+                    <th class="py-2 px-2 sm:px-4 text-center">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="sched in scheds" :key="sched.id">
+                    <td class="py-2 px-2 sm:px-4 text-center">{{ sched.day }}</td>
+                    <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime12h(sched.start_time) }}</td>
+                    <td class="py-2 px-2 sm:px-4 text-center">{{ formatTime12h(sched.end_time) }}</td>
+                    <td class="py-2 px-2 sm:px-4 text-center">{{ sched.subject_name }}</td>
+                    <td class="py-2 px-2 sm:px-4 text-center">{{ sched.type || sched.schedule_type || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-        <div class="flex justify-end">
-          <button @click="showRoomSchedulesModal = false" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-semibold">Close</button>
         </div>
         <button @click="showRoomSchedulesModal = false" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
