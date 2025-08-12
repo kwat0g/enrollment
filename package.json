@@ -11,7 +11,7 @@
     "format": "prettier --write src/",
     "backend": "node backend/server.js",
     "a": "concurrently \"npm run dev\" \"npm run backend\"",
-    "b" : "taskkill /IM node.exe /F"
+    "b": "taskkill /IM node.exe /F"
   },
   "dependencies": {
     "@heroicons/vue": "^2.2.0",
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
+    "@playwright/test": "^1.54.2",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/eslint-config-prettier": "^10.2.0",
     "concurrently": "^9.2.0",

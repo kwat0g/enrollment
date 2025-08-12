@@ -163,65 +163,62 @@ const createSubject = async (req, res) => {
 // --- Admin: Edit subject ---
 const updateSubject = async (req, res) => {
   const { code, name, units } = req.body;
-  
-  // More lenient validation - check for empty strings and convert units to number
-  const trimmedCode = code ? code.toString().trim() : '';
-  const trimmedName = name ? name.toString().trim() : '';
-  
-  const errors = [];
-  if (!trimmedCode) {
-    errors.push('Subject code is required');
-  }
-  
-  if (!trimmedName) {
-    errors.push('Subject name is required');
-  }
-  
-  let unitsNumber;
+
   try {
-    unitsNumber = Number(units);
-  } catch (e) {
-    errors.push('Units must be a valid number');
-  }
-  
-  if (!unitsNumber || unitsNumber <= 0) {
-    errors.push('Units must be a positive number');
-  }
-  
-  if (errors.length > 0) {
-    return res.status(400).json({ 
-      error: `Missing required fields: ${errors.join(', ')}` 
-    });
-  }
-  
-  try {
-    // Get the current subject's data for validation
-    const [currentSubject] = await db.query(
+    // Load current subject first
+    const [currentRows] = await db.query(
       'SELECT s.*, sc.type FROM subjects s LEFT JOIN schedules sc ON s.id = sc.subject_id WHERE s.id = ?',
       [req.params.id]
     );
-    
-    if (!currentSubject.length) {
+    if (!currentRows.length) {
       return res.status(404).json({ error: 'Subject not found.' });
     }
-    
+    const current = currentRows[0];
+
+    // Derive final values (allow partial updates)
+    const finalCode = (code !== undefined && code !== null && code !== '')
+      ? code.toString().trim()
+      : String(current.code).trim();
+    const finalName = (name !== undefined && name !== null && name !== '')
+      ? name.toString().trim()
+      : String(current.name).trim();
+    let finalUnits = current.units;
+    if (units !== undefined && units !== null && units !== '') {
+      const n = Number(units);
+      if (Number.isNaN(n)) {
+        return res.status(400).json({ error: 'Units must be a valid number' });
+      }
+      finalUnits = n;
+    }
+
+    // Validate final values
+    const errors = [];
+    if (!finalCode) errors.push('Subject code is required');
+    if (!finalName) errors.push('Subject name is required');
+    if (!finalUnits || finalUnits <= 0) errors.push('Units must be a positive number');
+    if (errors.length > 0) {
+      return res.status(400).json({ error: `Missing required fields: ${errors.join(', ')}` });
+    }
+
     // Check for duplicate code with same type (excluding current subject)
     const [existingSubjects] = await db.query(
       'SELECT s.*, sc.type FROM subjects s LEFT JOIN schedules sc ON s.id = sc.subject_id WHERE s.code = ? AND s.id != ?',
-      [trimmedCode, req.params.id]
+      [finalCode, req.params.id]
     );
-    
     if (existingSubjects.length > 0) {
-      const existingSubject = existingSubjects[0];
-      if (existingSubject.type === currentSubject[0].type) {
-        return res.status(400).json({ 
-          error: `Subject code '${trimmedCode}' already exists with the same type '${existingSubject.type}'. Please use a different code or type.` 
+      const existing = existingSubjects[0];
+      if (existing.type === current.type) {
+        return res.status(400).json({
+          error: `Subject code '${finalCode}' already exists with the same type '${existing.type}'. Please use a different code or type.`
         });
       }
     }
-    
-    // Update only the basic subject fields (code, name, units)
-    await db.query('UPDATE subjects SET code=?, name=?, units=? WHERE id=?', [trimmedCode, trimmedName, unitsNumber, req.params.id]);
+
+    // Apply update
+    await db.query(
+      'UPDATE subjects SET code = ?, name = ?, units = ? WHERE id = ?',
+      [finalCode, finalName, finalUnits, req.params.id]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });

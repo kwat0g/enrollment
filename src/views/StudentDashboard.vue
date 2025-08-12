@@ -49,7 +49,6 @@ function logout() {
 const links = [
   { name: 'Enrollment', icon: AcademicCapIcon, to: '/student/enrollment' },
   { name: 'Accountabilities', icon: DocumentTextIcon, to: '/student/accountabilities' },
-  { name: 'Grades', icon: ChartBarIcon, to: '/student/grades' },
 ]
 
 // Auto-close sidebar on mobile after navigation

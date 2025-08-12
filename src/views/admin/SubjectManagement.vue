@@ -219,23 +219,31 @@ async function saveSubject() {
         if (!subjectRes.ok) throw new Error(subjectResponseData.error || 'Failed to update subject')
       }
 
-      // Optional: schedule update remains tied to the representative id
-      const scheduleData = {
-        type: newSubject.value.type,
-        day: newSubject.value.day,
-        start_time: newSubject.value.start_time,
-        end_time: newSubject.value.end_time,
-        room: newSubject.value.room
-      };
-      const scheduleRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}/schedule`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(scheduleData)
-      })
-      const scheduleResponseData = await scheduleRes.json()
-      console.log('Schedule update response:', scheduleResponseData);
-      if (!scheduleRes.ok) throw new Error(scheduleResponseData.error || 'Failed to update subject schedule')
-
+      // Update schedule ONLY if any schedule field changed
+      const orig = originalSubjectData.value || {}
+      const scheduleChanged = (
+        newSubject.value.type !== orig.type ||
+        newSubject.value.day !== orig.day ||
+        newSubject.value.start_time !== orig.start_time ||
+        newSubject.value.end_time !== orig.end_time ||
+        newSubject.value.room !== orig.room
+      )
+      if (scheduleChanged) {
+        const scheduleData = {
+          type: newSubject.value.type,
+          day: newSubject.value.day,
+          start_time: newSubject.value.start_time,
+          end_time: newSubject.value.end_time,
+          room: newSubject.value.room
+        };
+        const scheduleRes = await fetch(`http://localhost:5000/api/admin/subjects/${editingSubjectId.value}/schedule`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(scheduleData)
+        })
+        const scheduleRespData = await scheduleRes.json()
+        if (!scheduleRes.ok) throw new Error(scheduleRespData.error || 'Failed to update schedule')
+      }
       notifMessage.value = 'Subject updated successfully!'
       showNotifModal.value = true;
     } else {

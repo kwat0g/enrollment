@@ -93,7 +93,6 @@ const links = [
   { name: 'Room Management', icon: BuildingOfficeIcon, to: '/admin/rooms' },
   { name: 'Enrollment Management', icon: CheckCircleIcon, to: '/admin/enrollments' },
   { name: 'Accountabilities Management', icon: DocumentTextIcon, to: '/admin/accountabilities' },
-  { name: 'Reports', icon: DocumentChartBarIcon, to: '/admin/reports' },
 ]
 
 // Auto-close sidebar on mobile after navigation

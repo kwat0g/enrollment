@@ -54,7 +54,7 @@ const studentLogin = async (req, res) => {
       middle_name: fe.middle_name ?? null,
       last_name: fe.last_name ?? null,
       suffix: fe.suffix ?? null,
-      // Personal
+      // Personal 
       birthdate: fe.birthdate ?? null,
       sex: fe.sex ?? null,
       civil_status: fe.civil_status ?? null,

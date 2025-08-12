@@ -40,16 +40,23 @@
     <div class="grid grid-cols-1 gap-2 mb-4">
       <div>
         <label class="block text-gray-700 mb-1 font-semibold">Code</label>
-        <input v-model="courseForm.code" @input="clearValidationError" type="text" class="w-full border rounded px-2 py-1" />
+        <input v-model="courseForm.code" @input="(e) => onInputAlnum(e, 'code')" type="text" class="w-full border rounded px-2 py-1" />
       </div>
       <div>
         <label class="block text-gray-700 mb-1 font-semibold">Name</label>
-        <input v-model="courseForm.name" @input="clearValidationError" type="text" class="w-full border rounded px-2 py-1" />
+        <input v-model="courseForm.name" @input="(e) => onInputAlnum(e, 'name')" type="text" class="w-full border rounded px-2 py-1" />
       </div>
     </div>
     <div class="flex gap-2 justify-end">
       <button @click="handleCancel" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-      <button @click="trySaveCourse" class="px-4 py-2 bg-blue-900 text-white rounded">Save</button>
+      <button
+        @click="trySaveCourse"
+        :disabled="showEditModal && !hasCourseChanges"
+        :class="['px-4 py-2 rounded text-white', showEditModal && !hasCourseChanges ? 'bg-blue-900/50 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800']"
+        :title="showEditModal && !hasCourseChanges ? 'No changes to save' : 'Save'"
+      >
+        Save
+      </button>
     </div>
     <button @click="closeModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
   </div>
@@ -113,6 +120,8 @@ const showAddModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteModal = ref(false)
 const validationError = ref('')
+// Alphanumeric validation regex
+const alnum = /^[A-Za-z0-9]+$/
 const courseForm = ref({ id: null, code: '', name: '' })
 const originalCourseData = ref(null)
 const courseToDelete = ref(null)
@@ -152,6 +161,18 @@ function confirmCancel() {
 
 function clearValidationError() {
   validationError.value = ''
+}
+
+// Sanitize input to alphanumeric only and clear validation error
+function onInputAlnum(e, field) {
+  const val = typeof e?.target?.value === 'string' ? e.target.value : ''
+  const cleaned = val.replace(/[^A-Za-z0-9]/g, '')
+  if (field === 'code') {
+    courseForm.value.code = cleaned
+  } else if (field === 'name') {
+    courseForm.value.name = cleaned
+  }
+  clearValidationError()
 }
 
 function closeModal() {
@@ -194,6 +215,15 @@ async function fetchCourses() {
 async function saveCourse() {
   if (!courseForm.value.code || !courseForm.value.name) {
     validationError.value = 'All fields are required.'
+    return
+  }
+  // Frontend validation: only letters and numbers
+  if (!alnum.test(courseForm.value.code)) {
+    validationError.value = 'Course code must contain only letters and numbers.'
+    return
+  }
+  if (!alnum.test(courseForm.value.name)) {
+    validationError.value = 'Course name must contain only letters and numbers.'
     return
   }
   const method = showAddModal.value ? 'POST' : 'PUT'

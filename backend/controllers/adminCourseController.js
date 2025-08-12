@@ -14,15 +14,27 @@ const getAllCourses = async (req, res) => {
 // POST /api/admin/courses
 const createCourse = async (req, res) => {
   try {
-    const { code, name } = req.body;
+    // Sanitize inputs
+    const codeRaw = req.body.code;
+    const nameRaw = req.body.name;
+    const code = typeof codeRaw === 'string' ? codeRaw.trim() : '';
+    const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
     const requiredFields = [
       { key: 'code', label: 'Course code' },
       { key: 'name', label: 'Course name' }
     ];
     for (const field of requiredFields) {
-      if (!req.body[field.key]) {
+      if (!(field.key === 'code' ? code : name)) {
         return res.status(400).json({ error: `${field.label} is required.` });
       }
+    }
+    // Validate alphanumeric only (no spaces or special chars)
+    const alnum = /^[A-Za-z0-9]+$/;
+    if (!alnum.test(code)) {
+      return res.status(400).json({ error: 'Course code must contain only letters and numbers.' });
+    }
+    if (!alnum.test(name)) {
+      return res.status(400).json({ error: 'Course name must contain only letters and numbers.' });
     }
     // Check uniqueness
     const [existing] = await db.query('SELECT * FROM courses WHERE code = ?', [code]);
@@ -39,16 +51,28 @@ const createCourse = async (req, res) => {
 // PUT /api/admin/courses/:id
 const updateCourse = async (req, res) => {
   try {
-    const { code, name } = req.body;
+    // Sanitize inputs
+    const codeRaw = req.body.code;
+    const nameRaw = req.body.name;
+    const code = typeof codeRaw === 'string' ? codeRaw.trim() : '';
+    const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
     const { id } = req.params;
     const requiredFields = [
       { key: 'code', label: 'Course code' },
       { key: 'name', label: 'Course name' }
     ];
     for (const field of requiredFields) {
-      if (!req.body[field.key]) {
+      if (!(field.key === 'code' ? code : name)) {
         return res.status(400).json({ error: `${field.label} is required.` });
       }
+    }
+    // Validate alphanumeric only (no spaces or special chars)
+    const alnum = /^[A-Za-z0-9]+$/;
+    if (!alnum.test(code)) {
+      return res.status(400).json({ error: 'Course code must contain only letters and numbers.' });
+    }
+    if (!alnum.test(name)) {
+      return res.status(400).json({ error: 'Course name must contain only letters and numbers.' });
     }
     // Check uniqueness (ignore self)
     const [existing] = await db.query('SELECT * FROM courses WHERE code = ? AND id != ?', [code, id]);

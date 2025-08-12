@@ -2,7 +2,6 @@
   <div class="w-full min-w-0 px-2 sm:px-6 pt-5">
     <h2 class="text-base sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Student Management</h2>
     <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6 w-full">
-      <button @click="openAddModal" class="bg-blue-900 text-white px-4 py-2 rounded font-semibold hover:bg-blue-800 transition">Add Student</button>
       <button @click="openPendingModal" class="bg-emerald-600 text-white px-4 py-2 rounded font-semibold hover:bg-emerald-500 transition">Show Pending Enrollment</button>
       <button @click="openProcessingModal" class="bg-yellow-600 text-white px-4 py-2 rounded font-semibold hover:bg-yellow-500 transition">Show Processing Enrollment</button>
     </div>
@@ -535,7 +534,7 @@
           </div>
           <div>
             <label class="block text-gray-700 mb-1 font-semibold">ZIP</label>
-            <input v-model.trim="freshmanForm.zip" type="text" class="w-full border rounded px-2 py-1" maxlength="10" @input="clearValidationError" />
+            <input v-model.trim="freshmanForm.zip" type="text" inputmode="numeric" pattern="^\\d{4}$" class="w-full border rounded px-2 py-1" maxlength="4" @input="clearValidationError" />
           </div>
         </div>
 
@@ -648,12 +647,12 @@
           </div>
           <div>
             <label class="block text-gray-700 mb-1">Year Level</label>
-            <select v-model="freshmanForm.year_level" :disabled="freshmanForm.admission_type === 'Freshman'" class="w-full border rounded px-3 py-1.5 text-sm" @change="clearValidationError">
+            <select v-model="freshmanForm.year_level" class="w-full border rounded px-3 py-1.5 text-sm" @change="clearValidationError" :disabled="(freshmanForm.admission_type || '').toLowerCase() === 'freshman'">
               <option value="">-- Select Year --</option>
-              <option>1st Year</option>
-              <option>2nd Year</option>
-              <option>3rd Year</option>
-              <option>4th Year</option>
+              <option value="1st">1st Year</option>
+              <option value="2nd">2nd Year</option>
+              <option value="3rd">3rd Year</option>
+              <option value="4th">4th Year</option>
             </select>
           </div>
         </div>
@@ -1241,10 +1240,74 @@ function ensureTermDefaults() {
   if (!adminTermSem.value) adminTermSem.value = '1st Semester'
 }
 
-// Build merged irregular options from all scheduled subjects (group by subject+section)
+// Helper: filter scheduled subject rows to only those matching the student's course/year and current term (if present on rows)
+function filterScheduledForStudent(rows, student) {
+  const arr = Array.isArray(rows) ? rows : []
+  if (!student) return []
+  const get = (obj, keys, def = undefined) => {
+    for (const k of keys) { if (obj && obj[k] != null) return obj[k] }
+    return def
+  }
+  const digitsOnly = (v) => String(v ?? '').replace(/[^0-9]/g, '')
+  const normYear = (v) => digitsOnly(v)
+  const norm = (v) => String(v ?? '').trim().toLowerCase()
+
+  // Resolve student's course/name/code using coursesMap if available
+  const studentCourseId = student.course_id
+  const courseInfo = (typeof coursesMap !== 'undefined' && coursesMap && studentCourseId != null)
+    ? (coursesMap[studentCourseId] || {})
+    : {}
+  const studentCourseName = courseInfo?.name || ''
+  const studentCourseCode = courseInfo?.code || courseInfo?.short_name || ''
+  const studentYear = normYear(student.year_level)
+
+  // Term filters (if the scheduled rows carry these fields)
+  const wantSY = adminTermYear?.value
+  const wantSem = adminTermSem?.value
+
+  return arr.filter(row => {
+    const rowCourseId = get(row, ['course_id', 'courseId', 'courseID'])
+    const rowCourseName = get(row, ['course_name', 'courseName'])
+    const rowCourseCode = get(row, ['course_code', 'courseCode', 'course'])
+    let rowYearRaw = get(row, ['year_level', 'yearLevel', 'level', 'year', 'section_year'])
+    const rowSY = get(row, ['school_year', 'sy', 'term_year'])
+    const rowSem = get(row, ['semester', 'term', 'term_sem'])
+
+    // If year is not provided on the row, try to infer from section name like 'BSIT-1A' or '3rd Year'
+    if (!rowYearRaw) {
+      const secName = get(row, ['section_name', 'section'])
+      const m = String(secName || '').match(/(\d)(?:st|nd|rd|th)?/i)
+      if (m) rowYearRaw = m[1]
+    }
+
+    const candIds = studentCourseId != null ? [String(studentCourseId)] : []
+    const candNames = [studentCourseName, studentCourseCode].filter(Boolean).map(norm)
+    const rowIdStr = rowCourseId != null ? String(rowCourseId) : ''
+    const rowNameVals = [rowCourseName, rowCourseCode].filter(Boolean).map(norm)
+
+    let byCourse = false
+    if (candIds.length && rowIdStr) {
+      byCourse = candIds.includes(rowIdStr)
+    } else if (candNames.length && rowNameVals.length) {
+      byCourse = candNames.some(a => rowNameVals.some(b => a === b || a.includes(b) || b.includes(a)))
+    }
+    if (!byCourse) return false
+
+    const byYear = !studentYear || normYear(rowYearRaw) === studentYear
+
+    // If term filters are set and present on rows, enforce them; otherwise ignore
+    const bySY = !wantSY || !rowSY || String(rowSY) === String(wantSY)
+    const bySem = !wantSem || !rowSem || String(rowSem).toLowerCase() === String(wantSem).toLowerCase()
+
+    return byCourse && byYear && bySY && bySem
+  })
+}
+
+// Build merged irregular options from scheduled subjects (filtered by student's course/year)
 const adminIrregularOptions = computed(() => {
+  const rows = filterScheduledForStudent(adminAllScheduledSubjects.value, adminEnrollStudent.value)
   const map = new Map()
-  for (const row of adminAllScheduledSubjects.value) {
+  for (const row of rows) {
     const key = `${row.subject_code}-${row.section_name}`
     if (!map.has(key)) {
       map.set(key, {
@@ -1709,15 +1772,15 @@ const studentForm = ref({
 // Freshman Enrollment full form (parity with FreshmanEnrollment.vue)
 const freshmanForm = ref({
   // Personal
-  first_name: '', middle_name: '', last_name: '', suffix: '', birthdate: '', sex: '', civil_status: '', nationality: '', religion: '', place_of_birth: '',
-  // Contact + PSGC
-  email: '', mobile: '', region_code: '', province_code: '', city_code: '', barangay_code: '', region: '', province: '', city: '', barangay: '', address_line: '', zip: '',
+  first_name: '', middle_name: '', last_name: '', suffix: '', birthdate: '', sex: '', civil_status: '', nationality: '', place_of_birth: '', religion: '',
+  // Contact & Address
+  email: '', mobile: '', region_code: '', region: '', province_code: '', province: '', city_code: '', city: '', barangay_code: '', barangay: '', address_line: '', zip: '',
   // Guardian
   father_name: '', father_occupation: '', father_contact: '',
   mother_name: '', mother_occupation: '', mother_contact: '',
   guardian_name: '', guardian_relation: '', guardian_contact: '',
   // Academic/Program
-  shs_name: '', shs_track: '', preferred_sched: '', year_level: '', admission_type: 'Freshman',
+  shs_name: '', shs_track: '', preferred_sched: '', year_level: '', admission_type: '',
   // Consent
   consent: false,
 })
@@ -1772,6 +1835,16 @@ watch(() => freshmanForm.value.barangay_code, (newCode) => {
   freshmanForm.value.barangay = b ? b.name : ''
 })
 
+// Admission Type watcher: auto-set Year Level for Freshman and lock the select via :disabled in template
+watch(() => (freshmanForm.value.admission_type || '').toLowerCase(), (adm) => {
+  if (adm === 'freshman') {
+    // Always enforce 1st Year for Freshman per latest requirement
+    if (freshmanForm.value.year_level !== '1st') {
+      freshmanForm.value.year_level = '1st'
+    }
+  }
+})
+
 async function preloadLocationsFromCodes() {
   isPreloadingPSGC.value = true
   try {
@@ -1820,8 +1893,142 @@ const stepNames = ['Personal', 'Contact & Address', 'Guardian Info', 'Academic',
 const currentStep = ref(0)
 const isFirstStep = computed(() => currentStep.value === 0)
 const isLastStep = computed(() => currentStep.value === stepNames.length - 1)
-function nextStep() { if (!isLastStep.value) currentStep.value++ }
 function prevStep() { if (!isFirstStep.value) currentStep.value-- }
+// Validate required fields for the current step before moving forward
+function validateCurrentStep() {
+  const step = currentStep.value
+  const f = freshmanForm.value || {}
+  const s = studentForm.value || {}
+  validationError.value = ''
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const phoneRe = /^(09\d{9})$/
+
+  // Per-step sanitation before validating
+  if (step === 0) {
+    // Names: allow letters, spaces, .'- ; suffix optional
+    f.first_name = String(f.first_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.middle_name = String(f.middle_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.last_name = String(f.last_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.suffix = String(f.suffix || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.place_of_birth = String(f.place_of_birth || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.religion = String(f.religion || '').trim()
+    f.civil_status = String(f.civil_status || '').trim()
+    f.nationality = String(f.nationality || '').trim()
+  } else if (step === 1) {
+    f.email = String(f.email || '').trim().toLowerCase()
+    // Normalize mobile to 09xxxxxxxxx
+    f.mobile = String(f.mobile || '').replace(/\D+/g, '')
+    if (f.mobile.length === 10 && f.mobile.startsWith('9')) f.mobile = '0' + f.mobile
+    if (f.mobile.length > 11) f.mobile = f.mobile.slice(0, 11)
+    f.address_line = String(f.address_line || '').trim()
+    f.zip = String(f.zip || '').trim().replace(/[^0-9]/g, '')
+    if (f.zip.length > 4) f.zip = f.zip.slice(0, 4)
+  } else if (step === 2) {
+    // Guardian step sanitation
+    f.father_name = String(f.father_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.father_occupation = String(f.father_occupation || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.father_contact = String(f.father_contact || '').replace(/\D+/g, '')
+    if (f.father_contact.length === 10 && f.father_contact.startsWith('9')) f.father_contact = '0' + f.father_contact
+    if (f.father_contact.length > 11) f.father_contact = f.father_contact.slice(0, 11)
+
+    f.mother_name = String(f.mother_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.mother_occupation = String(f.mother_occupation || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.mother_contact = String(f.mother_contact || '').replace(/\D+/g, '')
+    if (f.mother_contact.length === 10 && f.mother_contact.startsWith('9')) f.mother_contact = '0' + f.mother_contact
+    if (f.mother_contact.length > 11) f.mother_contact = f.mother_contact.slice(0, 11)
+
+    f.guardian_name = String(f.guardian_name || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.guardian_relation = String(f.guardian_relation || '').trim().replace(/[^A-Za-z .'-]+/g, '')
+    f.guardian_contact = String(f.guardian_contact || '').replace(/\D+/g, '')
+    if (f.guardian_contact.length === 10 && f.guardian_contact.startsWith('9')) f.guardian_contact = '0' + f.guardian_contact
+    if (f.guardian_contact.length > 11) f.guardian_contact = f.guardian_contact.slice(0, 11)
+  } else if (step === 3) {
+    f.year_level = String(f.year_level || '').trim()
+  } else if (step === 4) {
+    s.course_id = (s.course_id ?? freshmanForm.value.course_id ?? '').toString().trim()
+    f.admission_type = String(f.admission_type || '').trim()
+  }
+
+  switch (step) {
+    // Personal
+    case 0: {
+      // Personal info: all fields required EXCEPT suffix. Show one-by-one warning and block if missing.
+      if (!(f.first_name || '').trim()) { validationError.value = 'First name is required.'; return false }
+      if (!(f.middle_name || '').trim()) { validationError.value = 'Middle name is required.'; return false }
+      if (!(f.last_name || '').trim()) { validationError.value = 'Last name is required.'; return false }
+      if (!(f.birthdate || '').trim()) { validationError.value = 'Birthdate is required.'; return false }
+      if (!(f.sex || '').trim()) { validationError.value = 'Gender is required.'; return false }
+      if (!(f.civil_status || '').trim()) { validationError.value = 'Civil status is required.'; return false }
+      if (!(f.nationality || '').trim()) { validationError.value = 'Nationality is required.'; return false }
+      if (!(f.place_of_birth || '').trim()) { validationError.value = 'Place of birth is required.'; return false }
+      if (!(f.religion || '').trim()) { validationError.value = 'Religion is required.'; return false }
+      validationError.value = ''
+      return true
+    }
+    // Contact & Address
+    case 1: {
+      if (!(f.email || '').trim()) { validationError.value = 'Email is required.'; return false }
+      if (!emailRe.test((f.email || '').trim())) { validationError.value = 'Enter a valid email address.'; return false }
+      if (!String(f.email).toLowerCase().endsWith('@gmail.com')) { validationError.value = 'Email must be a Gmail address.'; return false }
+      if (!(f.mobile || '').trim()) { validationError.value = 'Contact number is required.'; return false }
+      if (!phoneRe.test((f.mobile || '').trim())) { validationError.value = 'Enter a valid contact number (09XXXXXXXXX).'; return false }
+      if (!(f.region_code || '').trim()) { validationError.value = 'Region is required.'; return false }
+      if (!(f.province_code || '').trim()) { validationError.value = 'Province is required.'; return false }
+      if (!(f.city_code || '').trim()) { validationError.value = 'City/Town is required.'; return false }
+      if (!(f.barangay_code || '').trim()) { validationError.value = 'Barangay is required.'; return false }
+      if (!(f.address_line || '').trim()) { validationError.value = 'Address Line is required.'; return false }
+      if (!(f.zip || '').trim()) { validationError.value = 'ZIP is required.'; return false }
+      if (!/^\d{4}$/.test((f.zip || '').trim())) { validationError.value = 'ZIP must be exactly 4 digits.'; return false }
+      return true
+    }
+    // Guardian Info (required)
+    case 2: {
+      // Father
+      if (!(String(f.father_name || '').trim())) { validationError.value = 'Father name is required.'; return false }
+      if (!(String(f.father_contact || '').trim())) { validationError.value = 'Father contact is required.'; return false }
+      if (!String(f.father_occupation || '').trim()) { validationError.value = 'Father occupation is required.'; return false }
+      if (!phoneRe.test(String(f.father_contact || '').trim())) { validationError.value = 'Enter a valid father contact number (09XXXXXXXXX).'; return false }
+      // Mother
+      if (!(String(f.mother_name || '').trim())) { validationError.value = 'Mother name is required.'; return false }
+      if (!(String(f.mother_contact || '').trim())) { validationError.value = 'Mother contact is required.'; return false }
+      if (!String(f.mother_occupation || '').trim()) { validationError.value = 'Mother occupation is required.'; return false }
+      if (!phoneRe.test(String(f.mother_contact || '').trim())) { validationError.value = 'Enter a valid mother contact number (09XXXXXXXXX).'; return false }
+      // Guardian
+      if (!(f.guardian_name || '').trim()) { validationError.value = 'Guardian name is required.'; return false }
+      if (!(f.guardian_contact || '').trim()) { validationError.value = 'Guardian contact is required.'; return false }
+      if (!phoneRe.test(String(f.guardian_contact || '').trim())) { validationError.value = 'Enter a valid guardian contact number (09XXXXXXXXX).'; return false }
+      return true
+    }
+    // Academic (Step 4): all fields required
+    case 3: {
+      if (!(f.shs_name || '').trim()) { validationError.value = 'Senior High School Name is required.'; return false }
+      if (!(f.shs_track || '').trim()) { validationError.value = 'Track/Strand is required.'; return false }
+      return true
+    }
+    // Program (Step 5): all fields required
+    case 4: {
+      if (!((s.course_id ?? freshmanForm.value.course_id) || '').toString().trim()) { validationError.value = 'Please select a course.'; return false }
+      if (!(f.preferred_sched || '').trim()) { validationError.value = 'Please select a preferred schedule.'; return false }
+      if (!(f.admission_type || '').trim()) { validationError.value = 'Please select an admission type.'; return false }
+      if (!(f.year_level || '').trim()) { validationError.value = 'Please select a year level.'; return false }
+      if (!f.consent) { validationError.value = 'Please confirm the accuracy of the information (consent).'; return false }
+      return true
+    }
+    default:
+      return true
+  }
+}
+
+function nextStep() {
+  if (isLastStep.value) return
+  if (!validateCurrentStep()) return
+  currentStep.value++
+}
+
+// Clear any stale validation message when switching steps
+watch(currentStep, () => {
+  validationError.value = ''
+})
 
 // Computed property to check if student data has changed
 const hasStudentChanges = computed(() => {
@@ -1898,13 +2105,15 @@ const hasChanges = computed(() => hasStudentChanges.value || hasFreshmanChanges.
 // Live validity state to control Save button enabling
 const isFormValid = computed(() => {
   const f = studentForm.value || {}
-  const nameRe = /^[A-Za-z ]+$/
+  // Align allowed characters with freshman validation (letters, spaces, .'-)
+  const nameRe = /^[A-Za-z .'-]+$/
   const phoneRe = /^(09\d{9}|\d{10,11})$/
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-  const first = (f.first_name || '').trim()
-  const middle = (f.middle_name || '').trim()
-  const last = (f.last_name || '').trim()
+  // Fall back to freshmanForm fields when studentForm fields are empty
+  const first = (f.first_name || freshmanForm.value?.first_name || '').trim()
+  const middle = (f.middle_name || freshmanForm.value?.middle_name || '').trim()
+  const last = (f.last_name || freshmanForm.value?.last_name || '').trim()
   const gender = (f.gender || '').trim()
   // Accept autofilled values from freshmanForm as fallbacks
   const address = (f.address || freshmanForm.value?.address_line || '').trim()
@@ -1947,10 +2156,18 @@ const isFreshmanValid = computed(() => {
   if (!email || !emailRe.test(email)) return false
   if (!mobile || !phoneRe.test(mobile)) return false
   if (!(f.address_line || '').trim()) return false
+  if (!/^\d{4}$/.test(String(f.zip || '').trim())) return false
 
+  // Step 4 (Academic): require SHS fields
+  if (!(String(f.shs_name || '').trim())) return false
+  if (!(String(f.shs_track || '').trim())) return false
+
+  // Year level must be explicitly selected (no auto-default for any admission type)
   if (!(f.year_level || '').trim()) return false
   const course = studentForm.value?.course_id || f.course_id
   if (!course) return false
+  // Step 5 (Program): require preferred schedule
+  if (!(String(f.preferred_sched || '').trim())) return false
   if (!(f.admission_type || '').trim()) return false
   // Require consent checked for live validity
   if (!f.consent) return false
@@ -2077,13 +2294,20 @@ function saveStudent() {
   // Build student payload with fallbacks from freshmanForm to satisfy backend required fields
   const studentPayload = {
     ...studentForm.value,
-    gender: (studentForm.value.gender || freshmanForm.value.sex || '').trim(),
-    address: (studentForm.value.address || freshmanForm.value.address_line || '').trim(),
-    contact_number: (studentForm.value.contact_number || freshmanForm.value.mobile || '').trim(),
-    email: (studentForm.value.email || freshmanForm.value.email || '').trim(),
+    gender: (studentForm.value.gender || freshmanForm.value.sex || 'TANGINA').trim(),
+    address: (studentForm.value.address || freshmanForm.value.address_line || 'TANGINA').trim(),
+    contact_number: (studentForm.value.contact_number || freshmanForm.value.mobile || 'TANGINA').trim(),
+    email: (studentForm.value.email || freshmanForm.value.email || 'TANGINA').trim(),
     year_level: (studentForm.value.year_level || freshmanForm.value.year_level || '').toString(),
     course_id: studentForm.value.course_id || freshmanForm.value.course_id || '',
   }
+  // Normalize course_id to number if possible
+  if (studentPayload.course_id !== '' && studentPayload.course_id != null) {
+    const n = Number(studentPayload.course_id)
+    if (!Number.isNaN(n)) studentPayload.course_id = n
+  }
+  // Debug payloads for quicker diagnosis if backend rejects
+  console.log('Saving student with payload:', studentPayload)
   fetch(url, {
     method,
     headers: {
@@ -2092,42 +2316,98 @@ function saveStudent() {
     },
     body: JSON.stringify(studentPayload)
   })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) {
-        validationError.value = data.error
-        return
+    .then(async (res) => {
+      if (!res.ok) {
+        let msg = ''
+        try { const j = await res.json(); msg = j?.error || JSON.stringify(j) } catch { msg = await res.text() }
+        throw new Error(msg || `Failed to save student (${res.status})`)
+        console.log("studentPayload here is not working")
       }
+      return res.json()
+    })
+    .then(data => {
       // On success, sync to freshman_enrollments
       const payload = buildFreshmanPayload()
       if (!isEditMode.value) {
         // Create
-        payload.student_id = studentForm.value.student_id
-        payload.course_id = studentForm.value.course_id || null
-        payload.year_level = studentForm.value.year_level || freshmanForm.value.year_level
-        return fetch('http://localhost:5000/api/admin/freshman-enrollments', {
+        // Use the numeric primary key from the backend response if available
+        let createdNumericId = null
+        if (data && typeof data === 'object') {
+          createdNumericId = data.id ?? data.student?.id ?? data.insertId ?? null
+        }
+        if (createdNumericId != null) {
+          const n = Number(createdNumericId)
+          payload.student_id = Number.isNaN(n) ? null : n
+        } else {
+          payload.student_id = null
+        }
+        payload.course_id = studentForm.value.course_id || freshmanForm.value.course_id || null
+        if (payload.course_id !== null) {
+          const n = Number(payload.course_id)
+          if (!Number.isNaN(n)) payload.course_id = n
+        }
+        payload.year_level = (studentForm.value.year_level || freshmanForm.value.year_level || '').toString()
+        payload.admission_type = payload.admission_type || (freshmanForm.value.admission_type || 'Freshman')
+        console.log('Creating freshman_enrollment payload:', payload)
+        const postFreshman = (finalPayload) => fetch('http://localhost:5000/api/admin/freshman-enrollments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
           },
-          body: JSON.stringify(payload)
-        }).then(r => r.json()).then(() => {
+          body: JSON.stringify(finalPayload)
+        }).then(async (r) => {
+          if (!r.ok) {
+            let msg = ''
+            try { const j = await r.json(); msg = j?.error || JSON.stringify(j) } catch { msg = await r.text() }
+            throw new Error(msg || `Failed to create freshman enrollment (${r.status})`)
+          }
+          return r.json()
+        })
+
+        // If backend did not return a numeric id, try to fetch the created student by code to get it
+        const ensureNumericId = async () => {
+          if (payload.student_id !== null) return payload.student_id
+          try {
+            const r = await fetch(`http://localhost:5000/api/admin/students/${encodeURIComponent(studentForm.value.student_id)}`, {
+              headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+            })
+            if (r.ok) {
+              const sj = await r.json()
+              const n = Number(sj?.id ?? sj?.student?.id)
+              if (!Number.isNaN(n)) return n
+            }
+          } catch (e) { /* ignore */ }
+          return null
+        }
+
+        return ensureNumericId().then((numId) => {
+          const finalPayload = { ...payload, student_id: numId }
+          console.log('Creating freshman_enrollment payload (final):', finalPayload)
+          return postFreshman(finalPayload)
+        }).then(() => {
+          console.log("buildFreshmanPayload is working")
           showAddModal.value = false
           fetchStudents()
           notifMessage.value = 'Student added!'
           showNotifModal.value = true
-        }).catch(() => {
+        }).catch((err) => {
           // Still close modal but report warning
           showAddModal.value = false
           fetchStudents()
-          notifMessage.value = 'Student added, but failed to save freshman details.'
+          notifMessage.value = `Student added, but failed to save freshman details: ${err?.message || 'Unknown error'}`
           showNotifModal.value = true
         })
       } else {
         // Update by student_id
-        payload.course_id = studentForm.value.course_id || null
-        payload.year_level = studentForm.value.year_level || payload.year_level
+        payload.course_id = studentForm.value.course_id || payload.course_id || freshmanForm.value.course_id || null
+        if (payload.course_id !== null) {
+          const n = Number(payload.course_id)
+          if (!Number.isNaN(n)) payload.course_id = n
+        }
+        payload.year_level = (studentForm.value.year_level || payload.year_level || freshmanForm.value.year_level || '').toString()
+        payload.admission_type = payload.admission_type || (freshmanForm.value.admission_type || 'Freshman')
+        console.log('Updating freshman_enrollment payload:', payload)
         return fetch(`http://localhost:5000/api/admin/freshman-enrollments/by-student/${studentForm.value.student_id}`, {
           method: 'PUT',
           headers: {
@@ -2138,6 +2418,7 @@ function saveStudent() {
         }).then(async (r) => {
           if (r.status === 404) {
             // No existing freshman record; create one
+            
             const createPayload = { ...payload, student_id: studentForm.value.student_id }
             return fetch('http://localhost:5000/api/admin/freshman-enrollments', {
               method: 'POST',
@@ -2148,22 +2429,28 @@ function saveStudent() {
               body: JSON.stringify(createPayload)
             })
           }
-          if (!r.ok) throw new Error('Failed to update freshman details')
-          return r
+          if (!r.ok) {
+            let msg = ''
+            try { const j = await r.json(); msg = j?.error || JSON.stringify(j) } catch { msg = await r.text() }
+            throw new Error(msg || `Failed to update freshman enrollment (${r.status})`)
+          }
+          return r.json()
         }).then(() => {
+          console.log("buildFreshmanPayload is working")
           showAddModal.value = false
           fetchStudents()
           notifMessage.value = 'Student updated!'
           showNotifModal.value = true
-        }).catch(() => {
+        }).catch((err) => {
           showAddModal.value = false
           fetchStudents()
-          notifMessage.value = 'Student updated, but failed to sync freshman details.'
+          notifMessage.value = `Student updated, but failed to sync freshman details: ${err?.message || 'Unknown error'}`
           showNotifModal.value = true
         })
       }
     })
-    .catch(() => {
+    .catch((err) => {
+      validationError.value = `Failed to save student: ${err?.message || 'Unknown error'}`
       validationError.value = 'Failed to save student.'
     })
 }
@@ -2173,45 +2460,62 @@ function buildFreshmanPayload() {
   const s = studentForm.value
   const f = freshmanForm.value
   // Map existing modal fields to freshman payload; rest taken from freshmanForm
-  return {
-    first_name: f.first_name || s.first_name,
-    middle_name: f.middle_name || s.middle_name || '',
-    last_name: f.last_name || s.last_name,
-    suffix: f.suffix || s.suffix || '',
-    birthdate: f.birthdate || '',
-    sex: f.sex || s.gender || '',
-    civil_status: f.civil_status || '',
-    nationality: f.nationality || '',
-    place_of_birth: f.place_of_birth || '',
-    religion: f.religion || '',
-    email: f.email || s.email || '',
-    mobile: f.mobile || s.contact_number || '',
-    region_code: f.region_code || '',
-    province_code: f.province_code || '',
-    city_code: f.city_code || '',
-    barangay_code: f.barangay_code || '',
-    region: f.region || '',
-    province: f.province || '',
-    city: f.city || '',
-    barangay: f.barangay || '',
-    address_line: f.address_line || s.address || '',
-    zip: f.zip || '',
-    father_name: f.father_name || '',
-    father_occupation: f.father_occupation || '',
-    father_contact: f.father_contact || '',
-    mother_name: f.mother_name || '',
-    mother_occupation: f.mother_occupation || '',
-    mother_contact: f.mother_contact || '',
-    guardian_name: f.guardian_name || '',
-    guardian_relation: f.guardian_relation || '',
-    guardian_contact: f.guardian_contact || '',
-    shs_name: f.shs_name || '',
-    shs_track: f.shs_track || '',
-    preferred_sched: f.preferred_sched || '',
-    year_level: f.year_level || s.year_level || '',
-    admission_type: f.admission_type || 'Freshman',
-    consent: !!f.consent,
+  const payload = {
+    // Identity
+    first_name: (f.first_name || s.first_name || '').trim(),
+    middle_name: (f.middle_name || s.middle_name || '').trim(),
+    last_name: (f.last_name || s.last_name || '').trim(),
+    suffix: (f.suffix || s.suffix || '').trim(),
+    birthdate: (f.birthdate || '').trim(),
+    sex: (f.sex || s.gender || '').trim(),
+    civil_status: (f.civil_status || '').trim(),
+    nationality: (f.nationality || '').trim(),
+    place_of_birth: (f.place_of_birth || '').trim(),
+    religion: (f.religion || '').trim(),
+    // Contact & Address
+    email: (f.email || s.email || '').trim().toLowerCase(),
+    mobile: String(f.mobile || s.contact_number || '').trim(),
+    region_code: String(f.region_code || '').trim(),
+    province_code: String(f.province_code || '').trim(),
+    city_code: String(f.city_code || '').trim(),
+    barangay_code: String(f.barangay_code || '').trim(),
+    region: String(f.region || '').trim(),
+    province: String(f.province || '').trim(),
+    city: String(f.city || '').trim(),
+    barangay: String(f.barangay || '').trim(),
+    address_line: (f.address_line || s.address || '').trim(),
+    zip: String(f.zip || '').trim(),
+    // Guardian
+    father_name: String(f.father_name || '').trim(),
+    father_occupation: String(f.father_occupation || '').trim(),
+    father_contact: String(f.father_contact || '').trim(),
+    mother_name: String(f.mother_name || '').trim(),
+    mother_occupation: String(f.mother_occupation || '').trim(),
+    mother_contact: String(f.mother_contact || '').trim(),
+    guardian_name: String(f.guardian_name || '').trim(),
+    guardian_relation: String(f.guardian_relation || '').trim(),
+    guardian_contact: String(f.guardian_contact || '').trim(),
+    // Academic/Program
+    shs_name: String(f.shs_name || '').trim(),
+    shs_track: String(f.shs_track || '').trim(),
+    preferred_sched: String(f.preferred_sched || '').trim(),
+    year_level: String(f.year_level || s.year_level || '').trim(),
+    admission_type: String(f.admission_type || '').trim(),
+    consent: f.consent ? 1 : 0,
+    course_id: (s.course_id || f.course_id || ''),
   }
+  // Normalize fields
+  if (payload.course_id !== '' && payload.course_id != null) {
+    const n = Number(payload.course_id)
+    if (!Number.isNaN(n)) payload.course_id = n
+  }
+  // Normalize mobile to 11-digit 09xxxxxxxxx if possible
+  payload.mobile = String(payload.mobile).replace(/\D+/g, '')
+  if (payload.mobile.length === 10 && payload.mobile.startsWith('9')) payload.mobile = '0' + payload.mobile
+  if (payload.mobile.length > 11) payload.mobile = payload.mobile.slice(0, 11)
+  // Zip to 4 digits
+  payload.zip = String(payload.zip).replace(/[^0-9]/g, '').slice(0, 4)
+  return payload
 }
 
 async function openEditModal(student) {
@@ -2281,7 +2585,7 @@ async function openEditModal(student) {
         middle_name: data.middle_name || '',
         last_name: data.last_name || '',
         suffix: data.suffix || '',
-        birthdate: data.birthdate || '',
+        birthdate: (data.birthdate && data.birthdate !== '0000-00-00') ? data.birthdate : '',
         sex: data.sex || data.gender || '',
         civil_status: data.civil_status || '',
         nationality: data.nationality || '',
@@ -3102,27 +3406,47 @@ function cancelSaveStudent() {
 // Validation aligned with Freshman Enrollment form
 function validateStudentForm() {
   const f = studentForm.value
-  const nameRe = /^[A-Za-z ]+$/
+  const nameRe = /^[A-Za-z .'-]+$/
   const phoneRe = /^(09\d{9}|\d{10,11})$/
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   // Trim key fields
-  f.first_name = (f.first_name || '').trim()
-  f.middle_name = (f.middle_name || '').trim()
-  f.last_name = (f.last_name || '').trim()
+  f.first_name = (f.first_name || freshmanForm.value.first_name || '').trim()
+  f.middle_name = (f.middle_name || freshmanForm.value.middle_name || '').trim()
+  f.last_name = (f.last_name || freshmanForm.value.last_name || '').trim()
   f.suffix = (f.suffix || '').trim()
   // Accept autofill fallbacks from freshmanForm for shared fields
   f.address = (f.address || freshmanForm.value.address_line || '').trim()
+  // Accept gender/year/course fallbacks from freshman form
+  f.gender = (f.gender || freshmanForm.value.sex || '').trim()
+  f.year_level = (f.year_level || freshmanForm.value.year_level || '').trim()
+  f.course_id = (f.course_id || freshmanForm.value.course_id)
+  // Sanitize inputs
+  f.first_name = f.first_name.replace(/[^A-Za-z .'-]+/g, '')
+  f.middle_name = f.middle_name.replace(/[^A-Za-z .'-]+/g, '')
+  f.last_name = f.last_name.replace(/[^A-Za-z .'-]+/g, '')
+  // Suffix is optional; allow letters, space, dot, and hyphen
+  f.suffix = f.suffix.replace(/[^A-Za-z .-]+/g, '')
+  // Digits only for contact; normalize common cases
+  f.contact_number = String(f.contact_number || '').replace(/\D+/g, '')
+  if (f.contact_number.length === 10 && f.contact_number.startsWith('9')) {
+    f.contact_number = '0' + f.contact_number
+  }
+  if (f.contact_number.length > 11) {
+    f.contact_number = f.contact_number.slice(0, 11)
+  }
+  // Normalize email
+  f.email = String(f.email || '').trim().toLowerCase()
   f.contact_number = (f.contact_number || freshmanForm.value.mobile || '').trim()
   f.email = (f.email || freshmanForm.value.email || '').trim()
 
   if (!f.first_name) { validationError.value = 'First name is required.'; return false }
-  if (!nameRe.test(f.first_name)) { validationError.value = 'First name should contain letters and spaces only.'; return false }
+  if (!nameRe.test(f.first_name)) { validationError.value = 'First name contains invalid characters.'; return false }
   if (!f.last_name) { validationError.value = 'Last name is required.'; return false }
-  if (!nameRe.test(f.last_name)) { validationError.value = 'Last name should contain letters and spaces only.'; return false }
-  if (f.middle_name && !nameRe.test(f.middle_name)) { validationError.value = 'Middle name should contain letters and spaces only.'; return false }
+  if (!nameRe.test(f.last_name)) { validationError.value = 'Last name contains invalid characters.'; return false }
+  if (f.middle_name && !nameRe.test(f.middle_name)) { validationError.value = 'Middle name contains invalid characters.'; return false }
   // Accept gender from either student form or freshman form's sex field
-  if (!((f.gender || '').trim() || (freshmanForm.value.sex || '').trim())) { validationError.value = 'Please select a gender.'; return false }
+  if (!(f.gender || '').trim()) { validationError.value = 'Please select a gender.'; return false }
   if (!f.address) { validationError.value = 'Address is required.'; return false }
   if (!f.contact_number) { validationError.value = 'Contact number is required.'; return false }
   if (!phoneRe.test(f.contact_number)) { validationError.value = 'Enter a valid contact number.'; return false }
@@ -3150,6 +3474,26 @@ function validateFreshmanForm() {
   f.email = (f.email || '').trim()
   f.mobile = (f.mobile || '').trim()
   f.address_line = (f.address_line || '').trim()
+
+  // Sanitize key inputs
+  f.first_name = f.first_name.replace(/[^A-Za-z .'-]+/g, '')
+  f.middle_name = f.middle_name.replace(/[^A-Za-z .'-]+/g, '')
+  f.last_name = f.last_name.replace(/[^A-Za-z .'-]+/g, '')
+  // Suffix optional; allow letters, space, dot, hyphen, apostrophe
+  f.suffix = f.suffix.replace(/[^A-Za-z .'-]+/g, '')
+  // Digits only for mobile; cap at 11 and normalize 9xxxxxxxxx -> 09xxxxxxxxx
+  f.mobile = String(f.mobile || '').replace(/\D+/g, '')
+  if (f.mobile.length === 10 && f.mobile.startsWith('9')) {
+    f.mobile = '0' + f.mobile
+  }
+  if (f.mobile.length > 11) {
+    f.mobile = f.mobile.slice(0, 11)
+  }
+  // Normalize email
+  f.email = f.email.toLowerCase()
+  // Normalize and fallback program selections
+  f.course_id = ((f.course_id ?? studentForm.value.course_id) ?? '').toString().trim()
+  f.year_level = (f.year_level || '').toString().trim()
 
   if (!f.first_name || !nameRe.test(f.first_name)) { validationError.value = 'First name is required (letters, spaces, .\'- allowed).'; return false }
   if (!f.last_name || !nameRe.test(f.last_name)) { validationError.value = 'Last name is required (letters, spaces, .\'- allowed).'; return false }

@@ -506,8 +506,12 @@ const getSectionSubjectSchedule = async (req, res) => {
 // --- Admin: Get schedule for a subject (for editing in SubjectManagement.vue) ---
 const getSubjectSchedule = async (req, res) => {
   try {
+    const subjectId = req.params.subjectId || req.params.id;
+    if (!subjectId) {
+      return res.status(400).json({ error: 'Invalid subject ID.' });
+    }
     // Get the first schedule for this subject (if any)
-    const [scheduleRows] = await db.query('SELECT * FROM schedules WHERE subject_id = ? LIMIT 1', [req.params.id]);
+    const [scheduleRows] = await db.query('SELECT * FROM schedules WHERE subject_id = ? LIMIT 1', [subjectId]);
     let schedule = null;
     let room = null;
     if (scheduleRows.length > 0) {
@@ -532,7 +536,10 @@ const getSubjectSchedule = async (req, res) => {
 // --- Admin: Update or insert schedule for a subject (for SubjectManagement.vue) ---
 const updateSubjectSchedule = async (req, res) => {
   try {
-    const subjectId = req.params.id;
+    const subjectId = req.params.subjectId || req.params.id;
+    if (!subjectId) {
+      return res.status(400).json({ error: 'Invalid subject ID.' });
+    }
     const { type, day, start_time, end_time, room } = req.body;
     // Find or create room
     let roomId = null;
@@ -577,8 +584,12 @@ const updateSubjectSchedule = async (req, res) => {
 // ... (rest of the code remains the same)
 const getSubjectSchedules = async (req, res) => {
   try {
+    const subjectId = req.params.subjectId || req.params.id;
+    if (!subjectId) {
+      return res.status(400).json({ error: 'Invalid subject ID.' });
+    }
     // Get all schedules for this subject
-    const [scheduleRows] = await db.query('SELECT * FROM schedules WHERE subject_id = ?', [req.params.id]);
+    const [scheduleRows] = await db.query('SELECT * FROM schedules WHERE subject_id = ?', [subjectId]);
     const schedules = [];
     for (const schedule of scheduleRows) {
       let room = null;
@@ -605,6 +616,10 @@ const getSubjectSchedules = async (req, res) => {
 // --- Admin: Get all schedules for a subject with subject, section, and room info (LEFT JOIN) ---
 const getSubjectFullSchedules = async (req, res) => {
   try {
+    const subjectId = req.params.subjectId || req.params.id;
+    if (!subjectId) {
+      return res.status(400).json({ error: 'Invalid subject ID.' });
+    }
     const [rows] = await db.query(`
       SELECT 
         sc.id AS schedule_id,
@@ -624,7 +639,7 @@ const getSubjectFullSchedules = async (req, res) => {
       LEFT JOIN sections sec ON sc.section_id = sec.id
       LEFT JOIN rooms r ON sc.room_id = r.id
       WHERE sc.subject_id = ?
-    `, [req.params.id]);
+    `, [subjectId]);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Server error.' });
