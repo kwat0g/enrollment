@@ -90,9 +90,9 @@ const getPendingEnrollments = async (req, res) => {
     const [rows] = await db.query(`
       SELECT 
         e.*, 
-        s.student_id, 
-        s.last_name, 
-        s.first_name, 
+        fe.student_id, 
+        fe.last_name, 
+        fe.first_name, 
         CASE 
           WHEN e.enrollment_type = 'irregular' THEN (
             SELECT GROUP_CONCAT(DISTINCT sec2.name SEPARATOR ', ')
@@ -104,7 +104,7 @@ const getPendingEnrollments = async (req, res) => {
         END as section_name,
         e.enrollment_type
       FROM enrollments e
-      JOIN students s ON e.student_id = s.id
+      JOIN freshman_enrollments fe ON e.student_id = fe.id
       LEFT JOIN sections sec ON e.section_id = sec.id
       WHERE e.status = 'pending'
       ORDER BY e.date_applied ASC

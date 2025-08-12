@@ -4,8 +4,7 @@ const { db } = require('../config/database');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../middleware/auth');
 
 // --- Student Login: fetch primary info from freshman_enrollments ---
-// Expects: { studentId, lastName } where studentId is the string student number (from students.student_id)
-// We map it to students.id, then fetch corresponding freshman_enrollments row by fe.student_id
+// Expects: { studentId, lastName } where studentId is the student's string ID stored in freshman_enrollments.student_id
 // Returns a token and a user object containing ALL freshman_enrollments fields (plus legacy fields for compatibility)
 const studentLogin = async (req, res) => {
   const { studentId, lastName } = req.body;
@@ -13,29 +12,31 @@ const studentLogin = async (req, res) => {
     return res.status(400).json({ error: 'Student ID and Last Name are required.' });
   }
   try {
-    // Find the freshman_enrollments row by provided credentials
+    const sid = String(studentId).trim();
+    const lname = String(lastName).trim();
+    // Find the freshman_enrollments row by provided credentials (forgiving on casing/spacing)
     const [feRows] = await db.query(
       `SELECT fe.*, c.name AS course_name, c.code AS course_code
        FROM freshman_enrollments fe
-       JOIN students s ON s.id = fe.student_id
        LEFT JOIN courses c ON fe.course_id = c.id
-       WHERE s.student_id = ? AND fe.last_name = ?
+       WHERE TRIM(fe.student_id) = TRIM(?)
+         AND LOWER(TRIM(fe.last_name)) = LOWER(TRIM(?))
        ORDER BY 
          (CASE fe.status WHEN 'accepted' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END) DESC,
          fe.id DESC
        LIMIT 1`,
-      [studentId, lastName]
+      [sid, lname]
     );
     if (!feRows.length) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
     const fe = feRows[0];
 
-    // Prepare token: id must be the numeric students.id; in freshman_enrollments this is fe.student_id
+    // Prepare token: id will be the numeric primary key of freshman_enrollments (fe.id)
     const token = jwt.sign(
       {
-        id: fe.student_id || null,
-        student_id: studentId, // string ID provided at login
+        id: fe.id || null,
+        student_id: fe.student_id, // string ID from freshman_enrollments
         role: 'student',
         year_level: fe.year_level || null,
         course_id: fe.course_id || null,

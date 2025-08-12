@@ -4,9 +4,9 @@ const { db } = require('../config/database');
 const getAllAccountabilities = async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT a.*, s.student_id AS student_id_str, s.first_name, s.last_name
+      SELECT a.*, fe.student_id AS student_id_str, fe.first_name, fe.last_name
       FROM accountabilities a
-      LEFT JOIN students s ON a.student_id = s.id
+      LEFT JOIN freshman_enrollments fe ON a.student_id = fe.id
       ORDER BY a.id DESC
     `);
     // For backward compatibility, set student_id to string value for frontend
@@ -44,11 +44,11 @@ const createAccountability = async (req, res) => {
     if (String(student_id).trim() !== '' && !isNaN(Number(student_id))) {
       resolvedStudentId = Number(student_id);
       // Ensure student exists
-      const [check] = await db.query('SELECT id FROM students WHERE id = ?', [resolvedStudentId]);
+      const [check] = await db.query('SELECT id FROM freshman_enrollments WHERE id = ?', [resolvedStudentId]);
       if (!check.length) return res.status(400).json({ error: 'Student not found.' });
     } else {
       // Treat as string student_id (e.g., '2025-00001') and resolve to students.id
-      const [rows] = await db.query('SELECT id FROM students WHERE student_id = ?', [String(student_id)]);
+      const [rows] = await db.query('SELECT id FROM freshman_enrollments WHERE student_id = ?', [String(student_id)]);
       if (!rows.length) return res.status(400).json({ error: 'Student not found.' });
       resolvedStudentId = rows[0].id;
     }

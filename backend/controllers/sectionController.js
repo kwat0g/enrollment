@@ -148,9 +148,9 @@ const getSectionEnrollments = async (req, res) => {
   const sectionId = req.params.sectionId;
   try {
     const [enrollmentRows] = await db.query(
-      `SELECT e.*, s.student_id, s.last_name, s.first_name
+      `SELECT e.*, fe.student_id, fe.last_name, fe.first_name
        FROM enrollments e
-       JOIN students s ON e.student_id = s.id
+       JOIN freshman_enrollments fe ON e.student_id = fe.id
        WHERE e.section_id = ? AND e.status IN ('pending', 'approved')`,
       [sectionId]
     );

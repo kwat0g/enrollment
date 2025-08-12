@@ -4,9 +4,9 @@ const { db } = require('../config/database');
 const getAllGrades = async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT g.*, s.student_id, s.first_name, s.last_name, sub.code as subject_code, sub.name as subject_name
+      SELECT g.*, fe.student_id, fe.first_name, fe.last_name, sub.code as subject_code, sub.name as subject_name
       FROM grades g
-      JOIN students s ON g.student_id = s.id
+      JOIN freshman_enrollments fe ON g.student_id = fe.id
       JOIN subjects sub ON g.subject_id = sub.id
       ORDER BY g.created_at DESC
     `);

@@ -27,21 +27,23 @@ function normalizeYearLevel(v) {
   return s;
 }
 
-// GET /api/admin/students
+// GET /api/admin/students (now backed by freshman_enrollments)
 const getAllStudents = async (req, res) => {
   try {
-    const [students] = await db.query(
-      `SELECT s.id, s.student_id, s.first_name, s.last_name, s.middle_name, s.suffix, s.gender, s.address, s.contact_number, s.email, s.course_id, s.year_level, c.name as course_name
-       FROM students s
-       LEFT JOIN courses c ON s.course_id = c.id`
+    const [rows] = await db.query(
+      `SELECT fe.id, fe.student_id, fe.first_name, fe.last_name, fe.middle_name, fe.suffix, fe.sex as gender,
+              fe.address_line as address, fe.mobile as contact_number, fe.email, fe.course_id, fe.year_level,
+              c.name as course_name
+       FROM freshman_enrollments fe
+       LEFT JOIN courses c ON fe.course_id = c.id`
     );
-    res.json(students);
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Server error.' });
   }
 };
 
-// POST /api/admin/students
+// POST /api/admin/students (now inserts into freshman_enrollments)
 const createStudent = async (req, res) => {
   try {
     const { student_id, first_name, last_name, middle_name, suffix, gender, address, contact_number, email, course_id, year_level } = req.body;
@@ -63,8 +65,9 @@ const createStudent = async (req, res) => {
       }
     }
     await db.query(
-      'INSERT INTO students (student_id, first_name, last_name, middle_name, suffix, gender, address, contact_number, email, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [student_id, first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, normalizeYearLevel(year_level)]
+      `INSERT INTO freshman_enrollments (student_id, first_name, last_name, middle_name, suffix, sex, address_line, mobile, email, course_id, year_level, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [student_id, first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, normalizeYearLevel(year_level), 'accepted']
     );
     res.json({ success: true });
   } catch (err) {
@@ -72,7 +75,7 @@ const createStudent = async (req, res) => {
   }
 };
 
-// PUT /api/admin/students/:student_id
+// PUT /api/admin/students/:student_id (now updates freshman_enrollments)
 const updateStudent = async (req, res) => {
   try {
     const { first_name, last_name, middle_name, suffix, gender, address, contact_number, email, course_id, year_level } = req.body;
@@ -81,7 +84,7 @@ const updateStudent = async (req, res) => {
       return res.status(400).json({ error: 'All fields are required.' });
     }
     await db.query(
-      'UPDATE students SET first_name=?, last_name=?, middle_name=?, suffix=?, gender=?, address=?, contact_number=?, email=?, course_id=?, year_level=? WHERE student_id=?',
+      'UPDATE freshman_enrollments SET first_name=?, last_name=?, middle_name=?, suffix=?, sex=?, address_line=?, mobile=?, email=?, course_id=?, year_level=? WHERE student_id=?',
       [first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, normalizeYearLevel(year_level), student_id]
     );
     res.json({ success: true });
@@ -90,39 +93,32 @@ const updateStudent = async (req, res) => {
   }
 };
 
-// DELETE /api/admin/students/:student_id
+// DELETE /api/admin/students/:student_id (now deletes from freshman_enrollments)
 const deleteStudent = async (req, res) => {
   try {
     const { student_id } = req.params;
-    await db.query('DELETE FROM students WHERE student_id=?', [student_id]);
+    await db.query('DELETE FROM freshman_enrollments WHERE student_id=?', [student_id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error.' });
   }
 };
 
-// GET /api/admin/students/next-id
+// GET /api/admin/students/next-id (now based on freshman_enrollments)
 const getNextStudentId = async (req, res) => {
   try {
-    // Find the maximum student_id that starts with 2025-
     const [rows] = await db.query(
-      "SELECT student_id FROM students WHERE student_id LIKE '2025-%' ORDER BY student_id DESC LIMIT 1"
+      "SELECT student_id FROM freshman_enrollments WHERE student_id LIKE '2025-%' ORDER BY student_id DESC LIMIT 1"
     );
-    let nextId;
     let lastNum = 0;
     if (rows.length > 0) {
       const lastId = rows[0].student_id;
       lastNum = parseInt(lastId.slice(5), 10);
-      // If lastNum is less than 1, start at 1
-      if (lastNum < 1) {
-        lastNum = 1;
-      } else {
-        lastNum += 1;
-      }
+      lastNum = Number.isFinite(lastNum) ? lastNum + 1 : 1;
     } else {
       lastNum = 1;
     }
-    nextId = `2025-${lastNum.toString().padStart(5, '0')}`;
+    const nextId = `2025-${lastNum.toString().padStart(5, '0')}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ error: 'Server error.' });

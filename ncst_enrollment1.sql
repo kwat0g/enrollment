@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 12, 2025 at 01:52 PM
+-- Generation Time: Aug 12, 2025 at 07:13 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -99,13 +99,6 @@ CREATE TABLE `enrollments` (
   `reference_number` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `enrollments`
---
-
-INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `enrollment_type`, `date_applied`, `reference_number`) VALUES
-(4, 1, 8, '2025-2026', '1st Semester', 'approved', NULL, '2025-08-12 19:51:32', 'ENR-20250812-4');
-
 -- --------------------------------------------------------
 
 --
@@ -165,8 +158,8 @@ CREATE TABLE `freshman_enrollments` (
 --
 
 INSERT INTO `freshman_enrollments` (`id`, `student_id`, `course_id`, `first_name`, `middle_name`, `last_name`, `suffix`, `birthdate`, `sex`, `civil_status`, `nationality`, `citizenship`, `place_of_birth`, `religion`, `email`, `mobile`, `region_code`, `province_code`, `city_code`, `barangay_code`, `region`, `province`, `city`, `barangay`, `address_line`, `zip`, `father_name`, `father_occupation`, `father_contact`, `mother_name`, `mother_occupation`, `mother_contact`, `guardian_name`, `guardian_relation`, `guardian_contact`, `shs_name`, `shs_track`, `preferred_sched`, `year_level`, `admission_type`, `consent`, `created_at`, `updated_at`, `status`, `documents`) VALUES
-(1, '2025-00001', 1, 'Jarmaine', 'Pedwino', 'Diegas', '', '2004-01-10', 'Male', 'Single', 'Filipino', 'Filipino', 'Manila', 'Roman Catholic', 'diegas.jarmaine@gmail.com', '09123131231', '040000000', '042100000', '042103000', '042103034', 'CALABARZON', 'Cavite', 'City of Bacoor', 'Habay II', 'Habay', '4102', 'Tatay Diegas', 'Ewan', '09123131231', 'Nanay Diegas', 'Ewan', '09123131231', 'Ate Diegas', 'Sibling', '09123131231', 'Habay', 'TVL', 'Afternoon', '3rd Year', 'Transferee', 1, '2025-08-10 16:36:29', '2025-08-12 08:36:53', 'accepted', '{\"psa\":true,\"form138\":true,\"good_moral\":true,\"tor\":true,\"notes\":\"\"}'),
-(2, NULL, 1, 'Kurt', 'Otin', 'De Mesa', '', '2004-02-01', 'Male', 'Single', 'Chinese', 'Chinese', 'LANGIT', 'Roman Catholic', 'demesa@gmail.com', '09121232321', '040000000', '042100000', '042106000', '042106005', 'CALABARZON', 'Cavite', 'City of Dasmariñas', 'Langkaan I', 'langkantot', '4111', 'dsa', 'dsads', '09111111111', 'sdsd', 'sdsd', '09111111111', 'dsadas', 'Sibling', '09111111111', 'langkantot', 'TVL', 'Evening', '1st Year', 'Freshman', 1, '2025-08-12 07:45:30', '2025-08-12 10:03:34', 'pending', NULL);
+(1, '2025-00001', 1, 'Jarmaine', 'Pedwino', 'Diegas', '', '2004-01-10', 'Male', 'Single', 'Filipino', 'Filipino', 'Manila', 'Roman Catholic', 'diegas.jarmaine@gmail.com', '09123131231', '040000000', '042100000', '042103000', '042103034', 'CALABARZON', 'Cavite', 'City of Bacoor', 'Habay II', 'Habay', '4102', 'Tatay Diegas', 'Ewan', '09123131231', 'Nanay Diegas', 'Ewan', '09123131231', 'Ate Diegas', 'Sibling', '09123131231', 'Habay', 'TVL', 'Afternoon', '3rd', 'Transferee', 1, '2025-08-10 16:36:29', '2025-08-12 15:38:50', 'accepted', '{\"psa\":true,\"form138\":true,\"good_moral\":true,\"tor\":true,\"notes\":\"\"}'),
+(2, NULL, 1, 'Kurt', 'Otin', 'De Mesa', '', '2004-02-01', 'Male', 'Single', 'Chinese', 'Chinese', 'LANGIT', 'Roman Catholic', 'demesa@gmail.com', '09121232321', '040000000', '042100000', '042106000', '042106005', 'CALABARZON', 'Cavite', 'City of Dasmariñas', 'Langkaan I', 'langkantot', '4111', 'dsa', 'dsads', '09111111111', 'sdsd', 'sdsd', '09111111111', 'dsadas', 'Sibling', '09111111111', 'langkantot', 'TVL', 'Evening', '1st', 'Freshman', 1, '2025-08-12 07:45:30', '2025-08-12 17:10:02', 'pending', NULL);
 
 -- --------------------------------------------------------
 
@@ -233,9 +226,9 @@ INSERT INTO `notifications` (`id`, `student_id`, `message`, `type`, `created_at`
 (13, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:44:58', 1),
 (14, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-04 22:49:33', 1),
 (15, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-10 13:17:47', 1),
-(16, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 18:50:06', 0),
-(17, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 19:13:11', 0),
-(18, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 19:13:13', 0);
+(16, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 18:50:06', 1),
+(17, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 19:13:11', 1),
+(18, 1, 'Your enrollment request has been rejected by the administrator.', 'enrollment', '2025-08-12 19:13:13', 1);
 
 -- --------------------------------------------------------
 
@@ -319,7 +312,7 @@ INSERT INTO `sections` (`id`, `name`, `year_level`, `course_id`, `schedule_type`
 
 CREATE TABLE `students` (
   `id` int(11) NOT NULL,
-  `student_id` varchar(20) NOT NULL,
+  `student_id` varchar(11) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `last_name` varchar(50) NOT NULL,
   `first_name` varchar(50) NOT NULL,
   `middle_name` varchar(50) DEFAULT NULL,
@@ -331,13 +324,6 @@ CREATE TABLE `students` (
   `year_level` varchar(10) DEFAULT NULL,
   `course_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `students`
---
-
-INSERT INTO `students` (`id`, `student_id`, `last_name`, `first_name`, `middle_name`, `suffix`, `gender`, `address`, `contact_number`, `email`, `year_level`, `course_id`) VALUES
-(1, '2025-00001', 'Diegas', 'Jarmaine', 'Pedwino', '', 'Male', 'Habay', '09123131231', 'diegas.jarmaine@gmail.com', '3rd Year', 1);
 
 -- --------------------------------------------------------
 
@@ -411,7 +397,8 @@ ALTER TABLE `freshman_enrollments`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_student_id` (`student_id`),
   ADD KEY `idx_course_id` (`course_id`),
-  ADD KEY `idx_city_brg` (`city_code`,`barangay_code`);
+  ADD KEY `idx_city_brg` (`city_code`,`barangay_code`),
+  ADD KEY `idx_fe_student_id` (`student_id`);
 
 --
 -- Indexes for table `grades`
@@ -467,7 +454,8 @@ ALTER TABLE `sections`
 ALTER TABLE `students`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `student_id` (`student_id`),
-  ADD KEY `course_id` (`course_id`);
+  ADD KEY `course_id` (`course_id`),
+  ADD KEY `idx_students_student_id` (`student_id`);
 
 --
 -- Indexes for table `subjects`
@@ -550,7 +538,7 @@ ALTER TABLE `sections`
 -- AUTO_INCREMENT for table `students`
 --
 ALTER TABLE `students`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `subjects`
@@ -566,14 +554,16 @@ ALTER TABLE `subjects`
 -- Constraints for table `accountabilities`
 --
 ALTER TABLE `accountabilities`
-  ADD CONSTRAINT `accountabilities_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`);
+  ADD CONSTRAINT `accountabilities_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`),
+  ADD CONSTRAINT `fk_accountabilities_student` FOREIGN KEY (`student_id`) REFERENCES `freshman_enrollments` (`id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `enrollments`
 --
 ALTER TABLE `enrollments`
   ADD CONSTRAINT `enrollments_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`),
-  ADD CONSTRAINT `enrollments_ibfk_2` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`);
+  ADD CONSTRAINT `enrollments_ibfk_2` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`),
+  ADD CONSTRAINT `fk_enrollments_student` FOREIGN KEY (`student_id`) REFERENCES `freshman_enrollments` (`id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `freshman_enrollments`
@@ -585,6 +575,7 @@ ALTER TABLE `freshman_enrollments`
 -- Constraints for table `grades`
 --
 ALTER TABLE `grades`
+  ADD CONSTRAINT `fk_grades_student` FOREIGN KEY (`student_id`) REFERENCES `freshman_enrollments` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `grades_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`),
   ADD CONSTRAINT `grades_ibfk_2` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`);
 
@@ -601,6 +592,7 @@ ALTER TABLE `irregular_enrollments`
 -- Constraints for table `notifications`
 --
 ALTER TABLE `notifications`
+  ADD CONSTRAINT `fk_notifications_student` FOREIGN KEY (`student_id`) REFERENCES `freshman_enrollments` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`);
 
 --
