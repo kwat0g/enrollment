@@ -3,58 +3,111 @@ const bcrypt = require('bcryptjs');
 const { db } = require('../config/database');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../middleware/auth');
 
-// --- Login endpoint (fix: do not use resolveStudentIdStrict here, allow login by student_id string and last_name) ---
+// --- Student Login: fetch primary info from freshman_enrollments ---
+// Expects: { studentId, lastName } where studentId is the string student number (from students.student_id)
+// We map it to students.id, then fetch corresponding freshman_enrollments row by fe.student_id
+// Returns a token and a user object containing ALL freshman_enrollments fields (plus legacy fields for compatibility)
 const studentLogin = async (req, res) => {
   const { studentId, lastName } = req.body;
   if (!studentId || !lastName) {
     return res.status(400).json({ error: 'Student ID and Last Name are required.' });
   }
   try {
-    const [rows] = await db.query(
-      `SELECT s.id, s.student_id, s.last_name, s.first_name, s.middle_name, s.suffix, s.gender, s.address, s.contact_number, s.email, s.year_level, s.course_id, c.name as course_name, c.code as course_code
-       FROM students s
-       JOIN courses c ON s.course_id = c.id
-       WHERE s.student_id = ? AND s.last_name = ? LIMIT 1`,
+    // Find the freshman_enrollments row by provided credentials
+    const [feRows] = await db.query(
+      `SELECT fe.*, c.name AS course_name, c.code AS course_code
+       FROM freshman_enrollments fe
+       JOIN students s ON s.id = fe.student_id
+       LEFT JOIN courses c ON fe.course_id = c.id
+       WHERE s.student_id = ? AND fe.last_name = ?
+       ORDER BY 
+         (CASE fe.status WHEN 'accepted' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END) DESC,
+         fe.id DESC
+       LIMIT 1`,
       [studentId, lastName]
     );
-    if (!rows.length) {
+    if (!feRows.length) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
-    const student = rows[0];
-    // You may want to keep the eligibility check
+    const fe = feRows[0];
+
+    // Prepare token: id must be the numeric students.id; in freshman_enrollments this is fe.student_id
     const token = jwt.sign(
       {
-        id: student.id, // numeric id
-        student_id: student.student_id, // string id
+        id: fe.student_id || null,
+        student_id: studentId, // string ID provided at login
         role: 'student',
-        year_level: student.year_level,
-        course_id: student.course_id,
+        year_level: fe.year_level || null,
+        course_id: fe.course_id || null,
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
-    res.json({
-      token,
-      user: {
-        id: student.id,
-        student_id: student.student_id,
-        last_name: student.last_name,
-        first_name: student.first_name,
-        middle_name: student.middle_name,
-        suffix: student.suffix,
-        gender: student.gender,
-        address: student.address,
-        contact_number: student.contact_number,
-        email: student.email,
-        year_level: student.year_level,
-        course_id: student.course_id,
-        course_name: student.course_name,
-        course_code: student.course_code,
-        role: 'student',
-      },
-    });
+
+    const user = {
+      // IDs
+      id: fe.student_id || null,
+      student_id: studentId,
+      // Name
+      first_name: fe.first_name ?? null,
+      middle_name: fe.middle_name ?? null,
+      last_name: fe.last_name ?? null,
+      suffix: fe.suffix ?? null,
+      // Personal
+      birthdate: fe.birthdate ?? null,
+      sex: fe.sex ?? null,
+      civil_status: fe.civil_status ?? null,
+      nationality: fe.nationality ?? null,
+      citizenship: fe.citizenship ?? null,
+      place_of_birth: fe.place_of_birth ?? null,
+      religion: fe.religion ?? null,
+      // Contact & Address
+      email: fe.email ?? null,
+      mobile: fe.mobile ?? null,
+      region_code: fe.region_code ?? null,
+      province_code: fe.province_code ?? null,
+      city_code: fe.city_code ?? null,
+      barangay_code: fe.barangay_code ?? null,
+      region: fe.region ?? null,
+      province: fe.province ?? null,
+      city: fe.city ?? null,
+      barangay: fe.barangay ?? null,
+      address_line: fe.address_line ?? null,
+      zip: fe.zip ?? null,
+      // Parents/Guardian
+      father_name: fe.father_name ?? null,
+      father_occupation: fe.father_occupation ?? null,
+      father_contact: fe.father_contact ?? null,
+      mother_name: fe.mother_name ?? null,
+      mother_occupation: fe.mother_occupation ?? null,
+      mother_contact: fe.mother_contact ?? null,
+      guardian_name: fe.guardian_name ?? null,
+      guardian_relation: fe.guardian_relation ?? null,
+      guardian_contact: fe.guardian_contact ?? null,
+      // Academic/Program
+      shs_name: fe.shs_name ?? null,
+      shs_track: fe.shs_track ?? null,
+      preferred_sched: fe.preferred_sched ?? null,
+      year_level: fe.year_level ?? null,
+      admission_type: fe.admission_type ?? null,
+      course_id: fe.course_id ?? null,
+      course_name: fe.course_name ?? null,
+      course_code: fe.course_code ?? null,
+      // Consent/Meta
+      consent: fe.consent ?? null,
+      status: fe.status ?? null,
+      created_at: fe.created_at ?? null,
+      updated_at: fe.updated_at ?? null,
+      // Legacy/back-compat fields expected by frontend
+      gender: fe.sex ?? null,
+      contact_number: fe.mobile ?? null,
+      address: fe.address_line ?? null,
+      role: 'student',
+    };
+
+    return res.json({ token, user });
   } catch (err) {
-    console.error(err);
+    console.error('studentLogin error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
 };

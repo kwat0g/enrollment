@@ -1,6 +1,30 @@
 const { db } = require('../config/database');
 const { resolveStudentIdStrict } = require('../utils/helpers');
 
+// Normalize year level to strict tokens used across the app
+function normalizeYearLevel(v) {
+  if (v == null) return null;
+  const s = String(v).toLowerCase().trim();
+  const m = s.match(/(1st|2nd|3rd|4th)|\b([1-4])\b/);
+  if (m) {
+    if (m[1]) return m[1];
+    if (m[2]) {
+      const n = Number(m[2]);
+      return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : '4th';
+    }
+  }
+  if (/first/.test(s)) return '1st';
+  if (/second/.test(s)) return '2nd';
+  if (/third/.test(s)) return '3rd';
+  if (/(fourth|forth)/.test(s)) return '4th';
+  const stripped = s.replace(/year/gi, '').trim();
+  if (stripped === '1') return '1st';
+  if (stripped === '2') return '2nd';
+  if (stripped === '3') return '3rd';
+  if (stripped === '4') return '4th';
+  return s;
+}
+
 // --- Student: Get available sections ---
 const getAvailableSections = async (req, res) => {
   try {
@@ -18,12 +42,14 @@ const getAvailableSections = async (req, res) => {
       return res.json([]);
     }
     
-    // DEBUG: Always return all sections for student's year_level and course, regardless of accountabilities or section status
+    // Return all OPEN sections for student's course, then filter by normalized year level
+    const studentYear = normalizeYearLevel(req.student.year_level);
     let sections = [];
     [sections] = await db.query(
-      `SELECT * FROM sections WHERE year_level = ? AND course_id = ?`,
-      [req.student.year_level, req.student.course_id]
+      `SELECT * FROM sections WHERE course_id = ? AND status = 'open'`,
+      [req.student.course_id]
     );
+    sections = sections.filter(sec => normalizeYearLevel(sec.year_level) === studentYear);
 
     // For each section, get its schedules (subjects, room, day, time)
     const sectionIds = sections.map(s => s.id);
@@ -138,12 +164,14 @@ const getAllAvailableSections = async (req, res) => {
   try {
     const studentNumericId = await resolveStudentIdStrict(req.student.id);
     
-    // Get all sections for student's year_level and course
+    // Get all OPEN sections for student's course, filter by normalized year level
+    const studentYear = normalizeYearLevel(req.student.year_level);
     let sections = [];
     [sections] = await db.query(
-      `SELECT * FROM sections WHERE year_level = ? AND course_id = ?`,
-      [req.student.year_level, req.student.course_id]
+      `SELECT * FROM sections WHERE course_id = ? AND status = 'open'`,
+      [req.student.course_id]
     );
+    sections = sections.filter(sec => normalizeYearLevel(sec.year_level) === studentYear);
 
     // For each section, get its schedules (subjects, room, day, time)
     const sectionIds = sections.map(s => s.id);

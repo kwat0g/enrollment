@@ -6,7 +6,7 @@ async function resolveStudentIdStrict(studentIdOrString) {
     return studentIdOrString;
   }
   // If it's a string, find the numeric id
-  const [rows] = await db.query('SELECT id FROM students WHERE student_id = ? LIMIT 1', [studentIdOrString]);
+  const [rows] = await db.query('SELECT id FROM freshman_enrollments WHERE student_id = ? LIMIT 1', [studentIdOrString]);
   if (!rows.length) throw new Error('Student not found');
   return rows[0].id;
 }

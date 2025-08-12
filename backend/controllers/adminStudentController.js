@@ -1,6 +1,32 @@
 // Admin Student Management Controller
 const { db } = require('../config/database');
 
+// Normalize year level to strict tokens: '1st' | '2nd' | '3rd' | '4th'
+function normalizeYearLevel(v) {
+  if (v == null) return null;
+  const s = String(v).toLowerCase().trim();
+  const digitMatch = s.match(/(1st|2nd|3rd|4th)|\b([1-4])\b/);
+  if (digitMatch) {
+    const g1 = digitMatch[1];
+    const g2 = digitMatch[2];
+    if (g1) return g1.replace(/\s*year$/, '').trim();
+    if (g2) {
+      const n = Number(g2);
+      return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : '4th';
+    }
+  }
+  if (/(first)/.test(s)) return '1st';
+  if (/(second)/.test(s)) return '2nd';
+  if (/(third)/.test(s)) return '3rd';
+  if (/(fourth|forth)/.test(s)) return '4th';
+  const stripped = s.replace(/year/gi, '').trim();
+  if (/^1$/.test(stripped)) return '1st';
+  if (/^2$/.test(stripped)) return '2nd';
+  if (/^3$/.test(stripped)) return '3rd';
+  if (/^4$/.test(stripped)) return '4th';
+  return s;
+}
+
 // GET /api/admin/students
 const getAllStudents = async (req, res) => {
   try {
@@ -38,7 +64,7 @@ const createStudent = async (req, res) => {
     }
     await db.query(
       'INSERT INTO students (student_id, first_name, last_name, middle_name, suffix, gender, address, contact_number, email, course_id, year_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [student_id, first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, year_level]
+      [student_id, first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, normalizeYearLevel(year_level)]
     );
     res.json({ success: true });
   } catch (err) {
@@ -56,7 +82,7 @@ const updateStudent = async (req, res) => {
     }
     await db.query(
       'UPDATE students SET first_name=?, last_name=?, middle_name=?, suffix=?, gender=?, address=?, contact_number=?, email=?, course_id=?, year_level=? WHERE student_id=?',
-      [first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, year_level, student_id]
+      [first_name, last_name, middle_name, suffix || '', gender, address, contact_number, email, course_id, normalizeYearLevel(year_level), student_id]
     );
     res.json({ success: true });
   } catch (err) {

@@ -8,23 +8,9 @@ export const useUserStore = defineStore('user', {
   }),
   actions: {
     setUser(user, token) {
-      this.user = {
-        id: user.id,
-        student_id: user.student_id,
-        last_name: user.last_name,
-        first_name: user.first_name,
-        middle_name: user.middle_name,
-        suffix: user.suffix,
-        gender: user.gender,
-        address: user.address,
-        contact_number: user.contact_number,
-        email: user.email,
-        year_level: user.year_level,
-        course_id: user.course_id,
-        course_name: user.course_name,
-        course_code: user.course_code,
-        role: user.role,
-      }
+      // Store the entire user object to include all freshman_enrollments fields
+      // and maintain backward-compat fields provided by the backend response
+      this.user = { ...user }
       this.token = token
       
       // Calculate token expiry (JWT tokens are valid for 1 day)
