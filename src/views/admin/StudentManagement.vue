@@ -141,20 +141,32 @@
             <input v-model.trim="freshmanForm.mobile" type="text" class="w-full border rounded px-2 py-1" maxlength="11" placeholder="09xxxxxxxxx" @input="clearValidationError" />
           </div>
           <div>
-            <label class="block text-gray-700 mb-1 font-semibold">Region Code</label>
-            <input v-model.trim="freshmanForm.region_code" type="text" class="w-full border rounded px-2 py-1" @input="clearValidationError" />
+            <label class="block text-gray-700 mb-1 font-semibold">Region</label>
+            <select v-model="freshmanForm.region_code" @change="clearValidationError" class="w-full border rounded px-2 py-1">
+              <option value="">-- Select Region --</option>
+              <option v-for="r in regions" :key="r.code" :value="r.code">{{ r.name }}</option>
+            </select>
           </div>
           <div>
-            <label class="block text-gray-700 mb-1 font-semibold">Province Code</label>
-            <input v-model.trim="freshmanForm.province_code" type="text" class="w-full border rounded px-2 py-1" @input="clearValidationError" />
+            <label class="block text-gray-700 mb-1 font-semibold">Province</label>
+            <select v-model="freshmanForm.province_code" @change="clearValidationError" class="w-full border rounded px-2 py-1" :disabled="!freshmanForm.region_code || provinces.length === 0">
+              <option value="">-- Select Province --</option>
+              <option v-for="p in provinces" :key="p.code" :value="p.code">{{ p.name }}</option>
+            </select>
           </div>
           <div>
-            <label class="block text-gray-700 mb-1 font-semibold">City/Municipality Code</label>
-            <input v-model.trim="freshmanForm.city_code" type="text" class="w-full border rounded px-2 py-1" @input="clearValidationError" />
+            <label class="block text-gray-700 mb-1 font-semibold">City/Town</label>
+            <select v-model="freshmanForm.city_code" @change="clearValidationError" class="w-full border rounded px-2 py-1" :disabled="(provinces.length > 0 ? !freshmanForm.province_code : !freshmanForm.region_code)">
+              <option value="">-- Select City/Town --</option>
+              <option v-for="p in cities" :key="p.code" :value="p.code">{{ p.name }}</option>
+            </select>
           </div>
           <div>
-            <label class="block text-gray-700 mb-1 font-semibold">Barangay Code</label>
-            <input v-model.trim="freshmanForm.barangay_code" type="text" class="w-full border rounded px-2 py-1" @input="clearValidationError" />
+            <label class="block text-gray-700 mb-1 font-semibold">Barangay</label>
+            <select v-model="freshmanForm.barangay_code" @change="clearValidationError" class="w-full border rounded px-2 py-1" :disabled="!freshmanForm.city_code">
+              <option value="">-- Select Barangay --</option>
+              <option v-for="b in barangays" :key="b.code" :value="b.code">{{ b.name }}</option>
+            </select>
           </div>
           <div>
             <label class="block text-gray-700 mb-1 font-semibold">Address Line</label>
@@ -313,8 +325,8 @@
         <div v-if="currentStep >= stepNames.length - 1" class="flex gap-2 justify-end">
           <button
             @click="trySaveStudent"
-            :disabled="!isAllValid || (isEditMode && !hasChanges)"
-            :class="['px-4 py-2 rounded text-white font-semibold', (!isAllValid || (isEditMode && !hasChanges)) ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800']"
+            :disabled="isEditMode ? !hasChanges : !isAllValid"
+            :class="['px-4 py-2 rounded text-white font-semibold', (isEditMode ? !hasChanges : !isAllValid) ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800']"
           >
             {{ isEditMode ? 'Save Changes' : 'Add Student' }}
           </button>
@@ -535,6 +547,152 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 
+// PSGC Cascading Select State (moved into <script setup>)
+const PSGC_BASE = 'https://psgc.gitlab.io/api'
+const regions = ref([])
+const provinces = ref([])
+const cities = ref([])
+const barangays = ref([])
+
+// Helper to normalize region short labels similar to Freshman form expectations
+const REGION_CODE_TO_SHORT = {
+  '010000000': 'Ilocos Region',
+  '020000000': 'Cagayan Valley',
+  '030000000': 'Central Luzon',
+  '040000000': 'CALABARZON',
+  '050000000': 'Bicol Region',
+  '060000000': 'Western Visayas',
+  '070000000': 'Central Visayas',
+  '080000000': 'Eastern Visayas',
+  '090000000': 'Zamboanga Peninsula',
+  '100000000': 'Northern Mindanao',
+  '110000000': 'Davao Region',
+  '120000000': 'SOCCSKSARGEN',
+  '130000000': 'NCR',
+  '140000000': 'CAR',
+  '150000000': 'BARMM',
+  '160000000': 'Caraga',
+  '170000000': 'MIMAROPA',
+}
+
+function toShortRegionLabel(r) {
+  const rawName = r.name || r.regionName || r.description || r.region_name || ''
+  const paren = rawName.match(/\(([^)]+)\)/)?.[1]
+  const short = r.shortName || r.short_name || paren
+  if (short) return short
+  const code = r.code || r.regionCode || r.psgcCode
+  if (REGION_CODE_TO_SHORT[code]) return REGION_CODE_TO_SHORT[code]
+  // Keyword fallbacks
+  const n = rawName.toLowerCase()
+  if (n.includes('national capital')) return 'NCR'
+  if (n.includes('cordillera')) return 'CAR'
+  if (n.includes('bangsamoro')) return 'BARMM'
+  if (n.includes('mimaropa')) return 'MIMAROPA'
+  if (n.includes('calabarzon')) return 'CALABARZON'
+  if (n.includes('caraga')) return 'Caraga'
+  return rawName || code
+}
+
+async function loadRegions() {
+  try {
+    const res = await fetch(`${PSGC_BASE}/regions/`)
+    const data = await res.json()
+    regions.value = (data || []).map(r => ({ code: r.code || r.regionCode || r.psgcCode, name: toShortRegionLabel(r) }))
+  } catch (_) {
+    regions.value = []
+  }
+}
+
+async function loadProvinces(regionCode) {
+  provinces.value = []
+  cities.value = []
+  barangays.value = []
+  if (!regionCode) return
+  try {
+    const res = await fetch(`${PSGC_BASE}/provinces/?region_code=${encodeURIComponent(regionCode)}`)
+    const data = await res.json()
+    // Guard against stale responses if region changed during fetch
+    if (regionCode !== freshmanForm.value.region_code) return
+    const rc = String(regionCode)
+    const filtered = (data || []).filter(p => {
+      const pRegion = p.regionCode || p.region_code
+      if (pRegion) return String(pRegion) === rc
+      const pCode = String(p.code || '')
+      // PSGC codes often start with the region prefix (e.g., 04 for CALABARZON)
+      return pCode.startsWith(rc.slice(0, 2))
+    })
+    provinces.value = filtered.map(p => ({ code: p.code, name: p.name || p.provinceName || p.description || p.shortName || p.code }))
+  } catch (_) {
+    provinces.value = []
+  }
+}
+
+async function loadCities(provinceCode) {
+  cities.value = []
+  barangays.value = []
+  if (!provinceCode) return
+  try {
+    const res = await fetch(`${PSGC_BASE}/cities-municipalities/?province_code=${encodeURIComponent(provinceCode)}`)
+    const data = await res.json()
+    // Guard against stale responses if province changed during fetch
+    if (provinceCode !== freshmanForm.value.province_code) return
+    const pc = String(provinceCode)
+    const filtered = (data || []).filter(c => {
+      const cProv = c.provinceCode || c.province_code
+      if (cProv) return String(cProv) === pc
+      const cCode = String(c.code || '')
+      // Use PSGC prefix fallback (province prefix is typically longer than region; use first 4 digits)
+      return cCode.startsWith(pc.slice(0, 4))
+    })
+    cities.value = filtered.map(c => ({ code: c.code, name: c.name || c.municipalityName || c.cityName || c.description || c.shortName || c.code }))
+  } catch (_) {
+    cities.value = []
+  }
+}
+
+async function loadBarangays(cityCode) {
+  barangays.value = []
+  if (!cityCode) return
+  try {
+    const res = await fetch(`${PSGC_BASE}/barangays/?city_code=${encodeURIComponent(cityCode)}`)
+    const data = await res.json()
+    const cc = String(cityCode)
+    const filtered = (data || []).filter(b => {
+      const bCity = b.cityCode || b.city_code
+      if (bCity) return String(bCity) === cc
+      const bCode = String(b.code || '')
+      // City prefix fallback: use first 6 digits
+      return bCode.startsWith(cc.slice(0, 6))
+    })
+    barangays.value = filtered.map(b => ({ code: b.code, name: b.name || b.barangayName || b.description || b.shortName || b.code }))
+  } catch (_) {
+    barangays.value = []
+  }
+}
+
+// Some regions (e.g., NCR) may not have provinces; support loading cities by region
+async function loadCitiesByRegion(regionCode) {
+  cities.value = []
+  if (!regionCode) return
+  try {
+    const res = await fetch(`${PSGC_BASE}/cities-municipalities/?region_code=${encodeURIComponent(regionCode)}`)
+    const data = await res.json()
+    // Guard against stale responses if region changed during fetch
+    if (regionCode !== freshmanForm.value.region_code) return
+    const rc = String(regionCode)
+    const filtered = (data || []).filter(c => {
+      const cRegion = c.regionCode || c.region_code
+      if (cRegion) return String(cRegion) === rc
+      const cCode = String(c.code || '')
+      // Region prefix fallback: first 2 digits
+      return cCode.startsWith(rc.slice(0, 2))
+    })
+    cities.value = filtered.map(c => ({ code: c.code, name: c.name || c.municipalityName || c.cityName || c.description || c.shortName || c.code }))
+  } catch (_) {
+    cities.value = []
+  }
+}
+
 const students = ref([])
 const courses = ref([])
 const loading = ref(false)
@@ -565,6 +723,94 @@ const freshmanForm = ref({
   // Consent
   consent: false,
 })
+
+// Guard to prevent watchers from resetting fields during preload
+const isPreloadingPSGC = ref(false)
+
+// Watchers to cascade and keep names in sync (must be declared after freshmanForm)
+watch(() => freshmanForm.value.region_code, async (newCode) => {
+  const r = regions.value.find(x => x.code === newCode)
+  freshmanForm.value.region = r ? r.name : ''
+  if (isPreloadingPSGC.value) return
+  // Clear dependent fields
+  freshmanForm.value.province_code = ''
+  freshmanForm.value.city_code = ''
+  freshmanForm.value.barangay_code = ''
+  freshmanForm.value.province = ''
+  freshmanForm.value.city = ''
+  freshmanForm.value.barangay = ''
+  // Load provinces and also cities by region (fallback for NCR)
+  await loadProvinces(newCode)
+  await loadCitiesByRegion(newCode)
+})
+
+watch(() => freshmanForm.value.province_code, async (newCode) => {
+  const p = provinces.value.find(x => x.code === newCode)
+  freshmanForm.value.province = p ? p.name : ''
+  if (isPreloadingPSGC.value) return
+  freshmanForm.value.city_code = ''
+  freshmanForm.value.barangay_code = ''
+  freshmanForm.value.city = ''
+  freshmanForm.value.barangay = ''
+  if (newCode) {
+    await loadCities(newCode)
+  } else if (freshmanForm.value.region_code) {
+    // If province cleared but region remains, repopulate cities via region
+    await loadCitiesByRegion(freshmanForm.value.region_code)
+  }
+})
+
+watch(() => freshmanForm.value.city_code, async (newCode) => {
+  const c = cities.value.find(x => x.code === newCode)
+  freshmanForm.value.city = c ? c.name : ''
+  if (isPreloadingPSGC.value) return
+  freshmanForm.value.barangay_code = ''
+  freshmanForm.value.barangay = ''
+  await loadBarangays(newCode)
+})
+
+watch(() => freshmanForm.value.barangay_code, (newCode) => {
+  const b = barangays.value.find(x => x.code === newCode)
+  freshmanForm.value.barangay = b ? b.name : ''
+})
+
+async function preloadLocationsFromCodes() {
+  isPreloadingPSGC.value = true
+  try {
+    // Load regions first
+    await loadRegions()
+    const regCode = freshmanForm.value.region_code
+    if (regCode) {
+      const r = regions.value.find(x => x.code === regCode)
+      freshmanForm.value.region = r ? r.name : freshmanForm.value.region || ''
+      // Load provinces and also cities via region fallback
+      await loadProvinces(regCode)
+      await loadCitiesByRegion(regCode)
+    }
+
+    const provCode = freshmanForm.value.province_code
+    if (provCode) {
+      await loadCities(provCode)
+      const p = provinces.value.find(x => x.code === provCode)
+      freshmanForm.value.province = p ? p.name : freshmanForm.value.province || ''
+    }
+
+    const cityCode = freshmanForm.value.city_code
+    if (cityCode) {
+      await loadBarangays(cityCode)
+      const c = cities.value.find(x => x.code === cityCode)
+      freshmanForm.value.city = c ? c.name : freshmanForm.value.city || ''
+    }
+
+    const brgyCode = freshmanForm.value.barangay_code
+    if (brgyCode) {
+      const b = barangays.value.find(x => x.code === brgyCode)
+      freshmanForm.value.barangay = b ? b.name : freshmanForm.value.barangay || ''
+    }
+  } finally {
+    isPreloadingPSGC.value = false
+  }
+}
 const originalStudentData = ref(null)
 const originalFreshmanData = ref(null)
 
@@ -662,16 +908,17 @@ const isFormValid = computed(() => {
   const middle = (f.middle_name || '').trim()
   const last = (f.last_name || '').trim()
   const gender = (f.gender || '').trim()
-  const address = (f.address || '').trim()
-  const contact = (f.contact_number || '').trim()
-  const email = (f.email || '').trim()
-  const year = (f.year_level || '').trim()
-  const course = f.course_id
+  // Accept autofilled values from freshmanForm as fallbacks
+  const address = (f.address || freshmanForm.value?.address_line || '').trim()
+  const contact = (f.contact_number || freshmanForm.value?.mobile || '').trim()
+  const email = (f.email || freshmanForm.value?.email || '').trim()
+  const year = (f.year_level || freshmanForm.value?.year_level || '').trim()
+  const course = f.course_id || freshmanForm.value?.course_id
 
   if (!first || !nameRe.test(first)) return false
   if (!last || !nameRe.test(last)) return false
   if (middle && !nameRe.test(middle)) return false
-  if (!gender) return false
+  if (!(gender || (freshmanForm.value?.sex || '').trim())) return false
   if (!address) return false
   if (!contact || !phoneRe.test(contact)) return false
   if (!email || !emailRe.test(email)) return false
@@ -781,6 +1028,12 @@ async function openAddModal() {
     shs_name: '', shs_track: '', preferred_sched: '', year_level: '', admission_type: 'Freshman',
     consent: false,
   }
+  // Initialize PSGC lists
+  regions.value = []
+  provinces.value = []
+  cities.value = []
+  barangays.value = []
+  await loadRegions()
   // Fetch next student ID from backend
   try {
     const res = await fetch('http://localhost:5000/api/admin/students/next-id', {
@@ -814,13 +1067,23 @@ function saveStudent() {
   const url = isEditMode.value
     ? `http://localhost:5000/api/admin/students/${studentForm.value.student_id}`
     : 'http://localhost:5000/api/admin/students'
+  // Build student payload with fallbacks from freshmanForm to satisfy backend required fields
+  const studentPayload = {
+    ...studentForm.value,
+    gender: (studentForm.value.gender || freshmanForm.value.sex || '').trim(),
+    address: (studentForm.value.address || freshmanForm.value.address_line || '').trim(),
+    contact_number: (studentForm.value.contact_number || freshmanForm.value.mobile || '').trim(),
+    email: (studentForm.value.email || freshmanForm.value.email || '').trim(),
+    year_level: (studentForm.value.year_level || freshmanForm.value.year_level || '').toString(),
+    course_id: studentForm.value.course_id || freshmanForm.value.course_id || '',
+  }
   fetch(url, {
     method,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
     },
-    body: JSON.stringify(studentForm.value)
+    body: JSON.stringify(studentPayload)
   })
     .then(res => res.json())
     .then(data => {
@@ -982,6 +1245,9 @@ async function openEditModal(student) {
   }
   originalFreshmanData.value = null
 
+  // Ensure latest region labels (short names) are loaded each time modal opens
+  await loadRegions()
+
   showAddModal.value = true
 
   // Fetch freshman enrollment by student_id (if exists) to populate the form
@@ -990,8 +1256,11 @@ async function openEditModal(student) {
       headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
     })
     if (!res.ok) {
-      // 404 means no existing freshman record; keep defaults
-      if (res.status === 404) return
+      // 404 means no existing freshman record; keep defaults but set baseline for change detection
+      if (res.status === 404) {
+        originalFreshmanData.value = { ...freshmanForm.value }
+        return
+      }
       // For 401 or other errors, surface a message but keep editing possible
       const errData = await res.json().catch(() => ({}))
       validationError.value = errData.error || 'Failed to load freshman details.'
@@ -1042,10 +1311,16 @@ async function openEditModal(student) {
         consent: !!data.consent,
       }
       originalFreshmanData.value = { ...freshmanForm.value }
+      // Preload PSGC lists and resolve names from codes
+      await preloadLocationsFromCodes()
     }
   } catch (e) {
     // Network or unexpected errors
     validationError.value = 'Failed to load freshman details.'
+  }
+  // If no details found (404 branch), still load regions for selection
+  if (!regions.value.length) {
+    await loadRegions()
   }
 }
 
@@ -1231,16 +1506,18 @@ function validateStudentForm() {
   f.middle_name = (f.middle_name || '').trim()
   f.last_name = (f.last_name || '').trim()
   f.suffix = (f.suffix || '').trim()
-  f.address = (f.address || '').trim()
-  f.contact_number = (f.contact_number || '').trim()
-  f.email = (f.email || '').trim()
+  // Accept autofill fallbacks from freshmanForm for shared fields
+  f.address = (f.address || freshmanForm.value.address_line || '').trim()
+  f.contact_number = (f.contact_number || freshmanForm.value.mobile || '').trim()
+  f.email = (f.email || freshmanForm.value.email || '').trim()
 
   if (!f.first_name) { validationError.value = 'First name is required.'; return false }
   if (!nameRe.test(f.first_name)) { validationError.value = 'First name should contain letters and spaces only.'; return false }
   if (!f.last_name) { validationError.value = 'Last name is required.'; return false }
   if (!nameRe.test(f.last_name)) { validationError.value = 'Last name should contain letters and spaces only.'; return false }
   if (f.middle_name && !nameRe.test(f.middle_name)) { validationError.value = 'Middle name should contain letters and spaces only.'; return false }
-  if (!f.gender) { validationError.value = 'Please select a gender.'; return false }
+  // Accept gender from either student form or freshman form's sex field
+  if (!((f.gender || '').trim() || (freshmanForm.value.sex || '').trim())) { validationError.value = 'Please select a gender.'; return false }
   if (!f.address) { validationError.value = 'Address is required.'; return false }
   if (!f.contact_number) { validationError.value = 'Contact number is required.'; return false }
   if (!phoneRe.test(f.contact_number)) { validationError.value = 'Enter a valid contact number.'; return false }
@@ -1312,7 +1589,9 @@ function loadCourses() {
 }
 
 onMounted(() => {
+  // Initial data fetch
   fetchStudents()
   fetchCourses()
+  loadRegions()
 })
 </script>
