@@ -4,9 +4,10 @@
     <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6 w-full">
       <button @click="openAddModal" class="bg-blue-900 text-white px-4 py-2 rounded font-semibold hover:bg-blue-800 transition">Add Student</button>
       <button @click="openPendingModal" class="bg-emerald-600 text-white px-4 py-2 rounded font-semibold hover:bg-emerald-500 transition">Show Pending Enrollment</button>
+      <button @click="openProcessingModal" class="bg-yellow-600 text-white px-4 py-2 rounded font-semibold hover:bg-yellow-500 transition">Show Processing Enrollment</button>
     </div>
     <div v-if="loading" class="text-center py-8 text-gray-500">Loading students...</div>
-    <div v-else class="overflow-x-auto bg-white rounded-xl shadow-lg p-2 sm:p-6 w-full min-w-0 max-w-full">
+    <div v-else class="overflow-x-auto overflow-y-visible bg-white rounded-xl shadow-lg p-2 sm:p-6 w-full min-w-0 max-w-full">
       <table class="min-w-[600px] w-full border text-xs sm:text-sm mb-6">
         <thead class="bg-gray-100 text-gray-900">
           <tr>
@@ -23,9 +24,13 @@
             <td class="py-2 px-2 sm:px-4 text-center">{{ student.last_name }}, {{ student.first_name }}</td>
             <td class="py-2 px-2 sm:px-4 text-center">{{ (coursesMap[student.course_id] && coursesMap[student.course_id].name) || student.course_id || '' }}</td>
             <td class="py-2 px-2 sm:px-4 text-center">{{ student.year_level }}</td>
-            <td class="py-2 px-2 sm:px-4 text-center">
-              <button @click="openEditModal(student)" class="bg-yellow-400 text-blue-900 px-3 py-1 rounded font-semibold hover:bg-yellow-300 transition mr-1">Edit</button>
-              <button @click="confirmDeleteStudent(student)" class="bg-red-400 text-white px-3 py-1 rounded font-semibold hover:bg-red-500 transition">Delete</button>
+            <td class="py-2 px-2 sm:px-4 text-center overflow-y-visible">
+              <div class="relative inline-block text-left" @click.stop>
+                <button @click.stop="toggleActionMenu(student.id, $event)" class="px-3 py-1 bg-gray-100 text-gray-800 rounded font-semibold hover:bg-gray-200 border">
+                  Actions ▾
+                </button>
+                <!-- Menu rendered via Teleport to avoid clipping -->
+              </div>
             </td>
           </tr>
           <tr v-if="students.length === 0">
@@ -33,6 +38,180 @@
           </tr>
         </tbody>
       </table>
+      <!-- Teleported Actions Menu -->
+      <teleport to="body">
+        <!-- backdrop to catch outside clicks on body level -->
+        <div v-if="openActionFor !== null" class="fixed inset-0 z-40" @click="openActionFor=null"></div>
+        <div
+          v-if="openActionFor !== null"
+          class="fixed z-50 w-44 bg-white border border-gray-200 rounded shadow-lg"
+          :style="{ top: actionMenuPos.y + 'px', left: actionMenuPos.x + 'px' }"
+          @click.stop
+        >
+          <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openAdminEnroll(actionMenuStudent)">Enroll</button>
+          <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openDocumentsModal(actionMenuStudent)">Documents</button>
+          <button class="w-full text-center px-3 py-2 hover:bg-gray-50" @click="openActionFor=null; openEditModal(actionMenuStudent)">Edit</button>
+          <button class="w-full text-center px-3 py-2 text-red-600 hover:bg-red-50" @click="openActionFor=null; confirmDeleteStudent(actionMenuStudent)">Delete</button>
+        </div>
+      </teleport>
+    </div>
+
+    <!-- Documents Modal -->
+    <div v-if="showDocsModal" class="fixed left-0 top-0 w-full h-full flex items-center justify-center z-60 pointer-events-auto">
+      <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200 w-full max-w-md pointer-events-auto relative">
+        <h3 class="text-lg font-bold mb-2 text-blue-900">Documents Submitted</h3>
+        <p class="text-xs text-gray-600 mb-3">Tick the documents the student submitted. Unticked items are considered <strong>To follow up</strong>.</p>
+        <div v-if="docsError" class="mb-3 p-2 bg-red-100 border border-red-300 text-red-700 rounded text-sm">{{ docsError }}</div>
+        <div class="space-y-2 mb-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="docsForm.psa" /> PSA (Birth Certificate)
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="docsForm.form138" /> Form 138 (Report Card) - Freshman
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="docsForm.good_moral" /> Good Moral Certificate - Freshman
+          </label>
+          <label v-if="showTor" class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="docsForm.tor" /> TOR - Transferee
+          </label>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Notes</label>
+            <textarea v-model="docsForm.notes" rows="3" class="w-full border rounded px-2 py-1 text-sm" placeholder="Optional notes or follow-up details"></textarea>
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button @click="closeDocumentsModal" class="px-4 py-2 bg-gray-200 rounded">Close</button>
+          <button :disabled="docsSaving" @click="saveDocuments" class="px-4 py-2 bg-blue-900 text-white rounded">{{ docsAfterSaveAction === 'accept' ? (docsSaving ? 'Saving...' : 'Save & Continue') : (docsSaving ? 'Saving...' : 'Save') }}</button>
+        </div>
+        <button @click="closeDocumentsModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+
+    <!-- Admin Enroll Modal (moved out to top-level) -->
+    <div v-if="showAdminEnrollModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-4 sm:p-6 w-full max-w-2xl relative">
+        <h3 class="text-lg font-bold mb-3 text-blue-900">Enroll Student</h3>
+        <div class="mb-4 text-sm text-gray-700">
+          <div class="mb-2"><strong>Student:</strong> {{ adminEnrollStudent?.last_name }}, {{ adminEnrollStudent?.first_name }} ({{ adminEnrollStudent?.student_id }})</div>
+          <div><strong>Program:</strong> {{ (coursesMap[adminEnrollStudent?.course_id] && coursesMap[adminEnrollStudent?.course_id].name) || adminEnrollStudent?.course_id }}</div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-gray-700 mb-1 font-semibold">Enrollment Type</label>
+            <select v-model="adminEnrollType" class="w-full border rounded px-2 py-1">
+              <option value="block">Block Section</option>
+              <option value="irregular">Irregular</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Block Section UI -->
+        <div v-if="adminEnrollType === 'block'" class="mb-4">
+          <label class="block text-gray-700 mb-1 font-semibold">Section</label>
+          <select v-model="adminBlockSectionId" class="w-full border rounded px-2 py-1">
+            <option value="">-- Select Section --</option>
+            <option v-for="sec in adminAvailableSections" :key="sec.id" :value="sec.id">
+              {{ sec.name }} ({{ (sec.schedule_type || sec.type || '').toString().toUpperCase() }})
+            </option>
+          </select>
+          <div v-if="!adminAvailableSections.length" class="text-xs text-gray-500 mt-1">
+            No open sections found matching this student's course and year level.
+          </div>
+          <div v-if="adminEnrollError" class="mt-2 p-2 bg-red-100 text-red-700 border border-red-300 rounded text-sm">{{ adminEnrollError }}</div>
+        </div>
+
+        <!-- Irregular UI: merged Lec/Lab per subject+section -->
+        <div v-else class="mb-4">
+          <div v-if="irregularLoading" class="text-gray-500">Loading subjects...</div>
+          <div v-else>
+            <div v-if="irregularError" class="mb-2 p-2 bg-red-100 text-red-700 border border-red-300 rounded text-sm">{{ irregularError }}</div>
+            <div class="max-h-[50vh] overflow-y-auto border rounded">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-100">
+                  <tr>
+                    <th class="py-2 px-2 text-left">Subject</th>
+                    <th class="py-2 px-2 text-left">Section</th>
+                    <th class="py-2 px-2 text-left">Types</th>
+                    <th class="py-2 px-2 text-left">Day/Time</th>
+                    <th class="py-2 px-2 text-left">Instructor</th>
+                    <th class="py-2 px-2 text-left">Select</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="opt in adminIrregularOptions" :key="opt.key" class="border-b">
+                    <td class="py-1 px-2">{{ opt.subject_code }} - {{ opt.subject_name }}</td>
+                    <td class="py-1 px-2">{{ opt.section_name }}</td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in opt.rows" :key="'type-' + row.id">
+                        {{ String(row.type || '').toUpperCase() || '-' }}
+                      </div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in opt.rows" :key="row.id">
+                          {{ row.day }} {{ formatTime(row.start_time) }}-{{ formatTime(row.end_time) }}
+                      </div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in opt.rows" :key="'inst-' + row.id">
+                        {{ (row.instructor || row.instructor_name || row.faculty_name || '-')}}
+                      </div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <input type="checkbox" :value="opt" v-model="adminSelectedIrregular" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-3 border rounded p-2">
+              <div class="font-semibold mb-1">Selected Preview</div>
+              <div v-if="adminIrregularGrouped.length === 0" class="text-sm text-gray-500">No selections yet.</div>
+              <table v-else class="w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="py-1 px-2 text-left">Subject</th>
+                    <th class="py-1 px-2 text-left">Section</th>
+                    <th class="py-1 px-2 text-left">Types</th>
+                    <th class="py-1 px-2 text-left">Day/Time</th>
+                    <th class="py-1 px-2 text-left">Instructor</th>
+                    <th class="py-1 px-2 text-left">Remove</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="g in adminIrregularGrouped" :key="g.key" class="border-b">
+                    <td class="py-1 px-2">{{ g.subject_code }} - {{ g.subject_name }}</td>
+                    <td class="py-1 px-2">{{ g.section_name }}</td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in g.rows" :key="'ptype-' + row.id">{{ String(row.type || '').toUpperCase() || '-' }}</div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in g.rows" :key="'ptime-' + row.id">{{ row.day }} {{ formatTime(row.start_time) }}-{{ formatTime(row.end_time) }}</div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <div v-for="row in g.rows" :key="'pinst-' + row.id">{{ (row.instructor || row.instructor_name || row.faculty_name || '-') }}</div>
+                    </td>
+                    <td class="py-1 px-2">
+                      <button class="px-2 py-0.5 bg-red-500 text-white rounded" @click="removeSelectedIrregular(g.key)">Remove</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 justify-end">
+          <button @click="closeAdminEnroll" class="px-4 py-2 bg-gray-200 rounded">Close</button>
+          <button v-if="adminEnrollType === 'block'" :disabled="adminEnrollSaving || !adminBlockSectionId" @click="showBlockPreview" class="px-4 py-2 bg-blue-900 text-white rounded disabled:opacity-50">
+            Preview & Confirm
+          </button>
+          <button v-else :disabled="adminEnrollSaving || adminSelectedIrregular.length === 0" @click="submitAdminIrregularEnroll" class="px-4 py-2 bg-blue-900 text-white rounded">
+            {{ adminEnrollSaving ? 'Saving...' : 'Enroll (Irregular)' }}
+          </button>
+        </div>
+        <button @click="closeAdminEnroll" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
     </div>
 
     <!-- Add/Edit Student Modal -->
@@ -428,6 +607,103 @@
         <button @click="closePendingModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
     </div>
+
+    <!-- Processing Freshman Enrollments Modal -->
+    <div v-if="showProcessingModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-2xl p-4 sm:p-6 w-auto max-w-[95vw] relative">
+        <h3 class="text-lg font-bold text-blue-900 mb-4">Processing Freshman Enrollments</h3>
+        <div v-if="processingLoading" class="text-gray-500 py-4">Loading processing enrollments...</div>
+        <div v-else>
+          <div v-if="processingError" class="mb-3 p-3 bg-red-100 border border-red-300 text-red-700 rounded">{{ processingError }}</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-[980px] w-full border text-xs sm:text-sm">
+              <thead class="bg-gray-100 text-gray-900">
+                <tr>
+                  <th class="py-2 px-2 text-center">Name</th>
+                  <th class="py-2 px-2 text-center">Email</th>
+                  <th class="py-2 px-2 text-center">Mobile</th>
+                  <th class="py-2 px-2 text-center">Course</th>
+                  <th class="py-2 px-2 text-center">Admission</th>
+                  <th class="py-2 px-2 text-center">Year</th>
+                  <th class="py-2 px-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="e in processingEnrollments" :key="e.id" class="border-b">
+                  <td class="py-2 px-2 text-center">{{ e.last_name }}, {{ e.first_name }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.email }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.mobile }}</td>
+                  <td class="py-2 px-2 text-center">{{ (coursesMap[e.course_id]?.code) || (coursesMap[e.course_id]?.name) || '-' }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.admission_type }}</td>
+                  <td class="py-2 px-2 text-center">{{ e.year_level }}</td>
+                  <td class="py-2 px-2 text-center">
+                    <div class="flex gap-2 justify-center">
+                      <button @click="viewEnrollment(e)" class="px-2 py-1 bg-blue-100 text-blue-900 rounded hover:bg-blue-200">View</button>
+                      <button @click="confirmAccept(e)" class="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-500">Accept</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="processingEnrollments.length === 0">
+                  <td colspan="7" class="text-center text-gray-400 py-6">No processing enrollments found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <button @click="closeProcessingModal" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+    
+    <!-- Block Section Preview Modal -->
+    <div v-if="showBlockPreviewModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white p-4 sm:p-6 rounded-lg shadow-lg border border-gray-200 w-full max-w-3xl relative">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold text-gray-800">Preview Block Enrollment</h3>
+          <button @click="showBlockPreviewModal = false" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="text-sm text-gray-600 mb-2" v-if="currentSelectedSection">
+          <div class="font-medium">
+            Section: {{ currentSelectedSection.name }}
+          </div>
+          <div>
+            Type: {{ (currentSelectedSection.schedule_type || currentSelectedSection.type || '').toString().toUpperCase() }}
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <div v-if="blockLoading" class="p-2 text-sm text-gray-500">Loading schedules...</div>
+          <div v-else-if="blockError" class="p-2 text-sm text-red-600">{{ blockError }}</div>
+          <div v-else>
+            <div v-if="(blockSchedules || []).length === 0" class="p-2 text-sm text-gray-500">No schedules found for this section.</div>
+            <table v-else class="w-full text-sm border">
+              <thead class="bg-gray-100 text-gray-900">
+                <tr>
+                  <th class="py-2 px-2 text-left">Subject</th>
+                  <th class="py-2 px-2 text-left">Type</th>
+                  <th class="py-2 px-2 text-left">Day/Time</th>
+                  <th class="py-2 px-2 text-left">Room</th>
+                  <th class="py-2 px-2 text-left">Instructor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in blockSchedules" :key="row.id || (row.subject_id + '-' + row.type + '-' + row.day + '-' + row.start_time)" class="border-b">
+                  <td class="py-1 px-2">{{ row.code || row.subject_code }} - {{ row.name || row.subject_name }}</td>
+                  <td class="py-1 px-2">{{ (row.type || '').toString().toUpperCase() }}</td>
+                  <td class="py-1 px-2">{{ row.day }} {{ formatTime(row.start_time) }}-{{ formatTime(row.end_time) }}</td>
+                  <td class="py-1 px-2">{{ row.room || row.room_name || '-' }}</td>
+                  <td class="py-1 px-2">{{ row.instructor || row.instructor_name || row.faculty_name || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <button @click="showBlockPreviewModal = false" class="px-4 py-2 bg-gray-200 rounded">Close</button>
+          <button :disabled="adminEnrollSaving || blockLoading" @click="submitAdminBlockEnroll" class="px-4 py-2 bg-blue-900 text-white rounded disabled:opacity-50">
+            {{ adminEnrollSaving ? 'Saving...' : 'Confirm Enroll' }}
+          </button>
+        </div>
+      </div>
+    </div>
     
     <!-- Enrollment Details Modal -->
     <div v-if="showDetailsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -535,7 +811,8 @@
         </div>
         <div class="mt-4 flex gap-2 justify-end">
           <button @click="showDetailsModal=false" class="px-4 py-2 bg-gray-200 rounded">Close</button>
-          <button v-if="selectedEnrollment" @click="acceptEnrollment(selectedEnrollment.id)" class="px-4 py-2 bg-emerald-600 text-white rounded">Accept</button>
+          <button v-if="selectedEnrollment && selectedEnrollment.status === 'pending'" @click="processEnrollment(selectedEnrollment.id)" class="px-4 py-2 bg-yellow-600 text-white rounded">Mark Processing</button>
+          <button v-if="selectedEnrollment && selectedEnrollment.status === 'processing'" @click="confirmAccept(selectedEnrollment)" class="px-4 py-2 bg-emerald-600 text-white rounded">Accept</button>
           <button v-if="selectedEnrollment" @click="rejectEnrollment(selectedEnrollment.id)" class="px-4 py-2 bg-red-500 text-white rounded">Reject</button>
         </div>
         <button @click="showDetailsModal=false" class="absolute top-2 right-3 text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
@@ -545,7 +822,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 // PSGC Cascading Select State (moved into <script setup>)
 const PSGC_BASE = 'https://psgc.gitlab.io/api'
@@ -573,6 +850,445 @@ const REGION_CODE_TO_SHORT = {
   '150000000': 'BARMM',
   '160000000': 'Caraga',
   '170000000': 'MIMAROPA',
+}
+
+// ===== Admin Enroll (Block/Irregular) State =====
+const showAdminEnrollModal = ref(false)
+const adminEnrollStudent = ref(null)
+const adminEnrollType = ref('block')
+const adminTermYear = ref('')
+const adminTermSem = ref('1st Semester')
+const adminAvailableSections = ref([])
+const adminBlockSectionId = ref('')
+const adminEnrollError = ref('')
+const adminEnrollSaving = ref(false)
+// Irregular selections
+const irregularLoading = ref(false)
+const irregularError = ref('')
+// Block section preview state
+const blockSchedules = ref([])
+const blockLoading = ref(false)
+const blockError = ref('')
+const adminAllScheduledSubjects = ref([])
+// Selected irregular GROUP options: { key, subject_id, section_id, subject_code, subject_name, section_name, types:Set, rows:[schedule rows], instructors:string[] }
+const adminSelectedIrregular = ref([])
+
+// Actions dropdown state for students table
+const openActionFor = ref(null)
+const actionMenuPos = ref({ x: 0, y: 0 })
+const actionMenuStudent = ref(null)
+
+// Block section preview modal state
+const showBlockPreviewModal = ref(false)
+
+const currentSelectedSection = computed(() => {
+  const id = adminBlockSectionId.value
+  if (!id) return null
+  return (adminAvailableSections.value || []).find(s => String(s.id) === String(id)) || null
+})
+function toggleActionMenu(id, evt) {
+  if (openActionFor.value === id) {
+    openActionFor.value = null
+    return
+  }
+  openActionFor.value = id
+  // Resolve the student for action handlers
+  try {
+    actionMenuStudent.value = (students.value || []).find(s => String(s.id) === String(id)) || null
+  } catch (_) {
+    actionMenuStudent.value = null
+  }
+  // Position near the button
+  try {
+    const el = evt?.currentTarget || evt?.target
+    if (el && typeof el.getBoundingClientRect === 'function') {
+      const rect = el.getBoundingClientRect()
+      const menuWidth = 176 // ~w-44
+      const gap = 4
+      let left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right + window.scrollX - menuWidth))
+      let top = Math.max(8, Math.min(window.innerHeight - 8, rect.bottom + window.scrollY + gap))
+      actionMenuPos.value = { x: left, y: top }
+    }
+  } catch (_) { /* noop */ }
+}
+
+// Close actions menu on outside click
+let _actionsOutsideHandler = null
+onMounted(() => {
+  _actionsOutsideHandler = () => { if (openActionFor.value !== null) openActionFor.value = null }
+  window.addEventListener('click', _actionsOutsideHandler)
+})
+onBeforeUnmount(() => {
+  if (_actionsOutsideHandler) {
+    window.removeEventListener('click', _actionsOutsideHandler)
+    _actionsOutsideHandler = null
+  }
+})
+
+// Open Admin Enroll modal for a student
+function openAdminEnroll(student) {
+  try {
+    adminEnrollStudent.value = student || null
+    adminEnrollType.value = 'block'
+    // Ensure sensible defaults for required term fields
+    ensureTermDefaults()
+    adminBlockSectionId.value = ''
+    adminEnrollError.value = ''
+    adminEnrollSaving.value = false
+    adminSelectedIrregular.value = []
+    // Pre-load available sections filtered by student's course/year
+    loadAdminSections()
+    showAdminEnrollModal.value = true
+  } catch (_) {
+    // noop
+  }
+}
+
+// Compute a default school year string like '2025-2026' based on current date
+function getDefaultSchoolYear() {
+  const now = new Date()
+  // Academic year starting June: if month >= June (5), AY is currentYear-currentYear+1 else previousYear-currentYear
+  const y = now.getFullYear()
+  const m = now.getMonth() // 0-11
+  const startYear = m >= 5 ? y : y - 1
+  return `${startYear}-${startYear + 1}`
+}
+
+function ensureTermDefaults() {
+  if (!adminTermYear.value) adminTermYear.value = getDefaultSchoolYear()
+  if (!adminTermSem.value) adminTermSem.value = '1st Semester'
+}
+
+// Build merged irregular options from all scheduled subjects (group by subject+section)
+const adminIrregularOptions = computed(() => {
+  const map = new Map()
+  for (const row of adminAllScheduledSubjects.value) {
+    const key = `${row.subject_code}-${row.section_name}`
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        subject_id: row.subject_id,
+        // representative section_id (first encountered)
+        section_id: row.section_id,
+        subject_code: row.subject_code,
+        subject_name: row.subject_name,
+        section_name: row.section_name,
+        types: new Set(),
+        rows: [],
+        instructors: new Set(),
+      })
+    }
+    const g = map.get(key)
+    if (!g.section_id && row.section_id) g.section_id = row.section_id
+    g.types.add(String(row.type || '').toUpperCase())
+    g.rows.push(row)
+    const inst = row.instructor || row.instructor_name || row.faculty_name || ''
+    if (inst) g.instructors.add(inst)
+  }
+  return Array.from(map.values()).map(g => ({
+    ...g,
+    types: new Set(g.types),
+    instructors: Array.from(g.instructors)
+  }))
+})
+
+// Grouped preview based on selected merged options (include rows for per-row layout)
+const adminIrregularGrouped = computed(() => {
+  return adminSelectedIrregular.value.map(opt => ({
+    key: opt.key,
+    subject_code: opt.subject_code,
+    subject_name: opt.subject_name,
+    section_id: opt.section_id,
+    section_name: opt.section_name,
+    types: Array.from(opt.types || []),
+    rows: Array.isArray(opt.rows) ? opt.rows : [],
+  }))
+})
+
+function removeSelectedIrregular(key) {
+  adminSelectedIrregular.value = adminSelectedIrregular.value.filter(opt => opt.key !== key)
+}
+
+function currentDefaultSY() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  return month < 6 ? `${year - 1}-${year}` : `${year}-${year + 1}`
+}
+
+function formatTime(t) {
+  if (!t || typeof t !== 'string') return t
+  // Support HH:MM and HH:MM:SS
+  const m = t.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/)
+  if (!m) return t
+  let h = parseInt(m[1], 10)
+  const minutes = m[2]
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  const hh = h.toString().padStart(2, '0')
+  return `${hh}:${minutes} ${ampm}`
+}
+
+function closeAdminEnroll() {
+  showAdminEnrollModal.value = false
+}
+
+async function loadAdminSections() {
+  adminAvailableSections.value = []
+  const token = sessionStorage.getItem('admin_token')
+  try {
+    const res = await fetch('http://localhost:5000/api/admin/sections', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    const s = adminEnrollStudent.value || {}
+    const sections = Array.isArray(data) ? data : []
+    const get = (obj, keys, def = undefined) => {
+      for (const k of keys) { if (obj && obj[k] != null) return obj[k] }
+      return def
+    }
+    // Helpers for normalization
+    const digitsOnly = (v) => String(v ?? '').replace(/[^0-9]/g, '')
+    const normYear = (v) => digitsOnly(v)
+    // Resolve student's course identifiers (id, name, code) via coursesMap if available
+    const studentCourseId = s.course_id
+    const courseInfo = (typeof coursesMap !== 'undefined' && coursesMap && studentCourseId != null)
+      ? (coursesMap[studentCourseId] || {})
+      : {}
+    const studentCourseName = courseInfo?.name || ''
+    const studentCourseCode = courseInfo?.code || courseInfo?.short_name || ''
+    const studentYear = normYear(s.year_level)
+
+    // Strict filter: only sections with status === 'open' and matching student's course/year
+    const filtered = sections.filter(sec => {
+      const secCourseId = get(sec, ['course_id', 'courseId', 'courseID'])
+      const secCourseName = get(sec, ['course_name', 'courseName'])
+      const secCourseCode = get(sec, ['course_code', 'courseCode', 'course'])
+      const secYearRaw = get(sec, ['year_level', 'yearLevel', 'level', 'year'])
+      const status = String(get(sec, ['status', 'state'], '') || '').toLowerCase()
+
+      const norm = (v) => String(v ?? '').trim().toLowerCase()
+      const candIds = studentCourseId != null ? [String(studentCourseId)] : []
+      const candNames = [studentCourseName, studentCourseCode].filter(Boolean).map(norm)
+      const secIdStr = secCourseId != null ? String(secCourseId) : ''
+      const secNameVals = [secCourseName, secCourseCode].filter(Boolean).map(norm)
+
+      // Prefer ID comparison when both sides have IDs
+      let byCourse = false
+      if (candIds.length && secIdStr) {
+        byCourse = candIds.includes(secIdStr)
+      } else if (candNames.length && secNameVals.length) {
+        // Compare names/codes case-insensitively; allow contains both ways
+        byCourse = candNames.some(a => secNameVals.some(b => a === b || a.includes(b) || b.includes(a)))
+      }
+
+      // If we couldn't determine (no data), do not match
+      if (!byCourse) return false
+
+      // Year match compares numeric part only (e.g., '3rd Year' -> '3')
+      const byYear = !studentYear || normYear(secYearRaw) === studentYear
+
+      const byStatus = status === 'open'
+      return byCourse && byYear && byStatus
+    })
+    adminAvailableSections.value = filtered
+  } catch (_) {
+    adminAvailableSections.value = []
+  }
+}
+
+// Load subjects with schedules for a selected block section (preview before enrolling)
+async function loadBlockSectionSchedules(sectionId) {
+  blockSchedules.value = []
+  blockError.value = ''
+  if (!sectionId) return
+  blockLoading.value = true
+  try {
+    const token = sessionStorage.getItem('admin_token')
+    const res = await fetch(`http://localhost:5000/api/admin/sections/${encodeURIComponent(sectionId)}/schedules`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || `Failed (${res.status})`)
+    blockSchedules.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    blockError.value = e?.message || 'Failed to load section schedules.'
+    blockSchedules.value = []
+  } finally {
+    blockLoading.value = false
+  }
+}
+
+async function loadAdminAllScheduledSubjects() {
+  irregularLoading.value = true
+  irregularError.value = ''
+  adminAllScheduledSubjects.value = []
+  const token = sessionStorage.getItem('admin_token')
+  try {
+    const res = await fetch('http://localhost:5000/api/admin/subjects/all-scheduled', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error(`Failed (${res.status})`)
+    const data = await res.json()
+    adminAllScheduledSubjects.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    irregularError.value = e?.message || 'Failed to load scheduled subjects.'
+  } finally {
+    irregularLoading.value = false
+  }
+}
+
+watch(adminEnrollType, (t) => {
+  if (t === 'irregular') loadAdminAllScheduledSubjects()
+  if (t === 'block') loadAdminSections()
+})
+
+watch(adminTermYear, () => {
+  if (adminEnrollType.value === 'block') loadAdminSections()
+})
+
+watch(adminTermSem, () => {
+  if (adminEnrollType.value === 'block') loadAdminSections()
+})
+
+// (No need to watch a show-all toggle; we strictly filter by open + course/year)
+
+// When a block section is chosen, load its subject schedules for preview
+watch(adminBlockSectionId, (id) => {
+  loadBlockSectionSchedules(id)
+})
+
+function showBlockPreview() {
+  adminEnrollError.value = ''
+  const id = adminBlockSectionId.value
+  if (!id) { adminEnrollError.value = 'Please select a section.'; return }
+  showBlockPreviewModal.value = true
+  // Ensure latest data
+  loadBlockSectionSchedules(id)
+}
+
+async function submitAdminBlockEnroll() {
+  adminEnrollError.value = ''
+  if (!adminBlockSectionId.value) { adminEnrollError.value = 'Please select a section.'; return }
+  ensureTermDefaults()
+  adminEnrollSaving.value = true
+  const token = sessionStorage.getItem('admin_token')
+  const sid = encodeURIComponent(adminEnrollStudent.value?.student_id || '')
+  try {
+    const res = await fetch(`http://localhost:5000/api/admin/students/${sid}/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ section_id: adminBlockSectionId.value, school_year: adminTermYear.value, semester: adminTermSem.value, auto_approve: true })
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json?.error) throw new Error(json?.error || `Failed (${res.status})`)
+    // Try to auto-approve explicitly in case backend ignored the flag
+    await autoApproveIfPossible(adminEnrollStudent.value, json)
+    showAdminEnrollModal.value = false
+    showBlockPreviewModal.value = false
+    notifMessage.value = 'Enrollment approved.'
+    showNotifModal.value = true
+  } catch (e) {
+    adminEnrollError.value = e?.message || 'Failed to enroll student.'
+  } finally {
+    adminEnrollSaving.value = false
+  }
+}
+
+async function submitAdminIrregularEnroll() {
+  irregularError.value = ''
+  if (!adminSelectedIrregular.value.length) { irregularError.value = 'Please select at least one schedule.'; return }
+  ensureTermDefaults()
+  adminEnrollSaving.value = true
+  const token = sessionStorage.getItem('admin_token')
+  const sid = encodeURIComponent(adminEnrollStudent.value?.student_id || '')
+  // Flatten all underlying schedule rows from each selected GROUP option
+  const subject_schedules = adminSelectedIrregular.value.flatMap(opt =>
+    (opt.rows || []).map(row => ({ subject_id: opt.subject_id, schedule_id: row.id, section_id: opt.section_id }))
+  )
+  try {
+    const res = await fetch(`http://localhost:5000/api/admin/students/${sid}/enroll/irregular`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ subject_schedules, school_year: adminTermYear.value, semester: adminTermSem.value, auto_approve: true })
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json?.error) throw new Error(json?.error || `Failed (${res.status})`)
+    // Try to auto-approve explicitly in case backend ignored the flag
+    await autoApproveIfPossible(adminEnrollStudent.value, json)
+    showAdminEnrollModal.value = false
+    notifMessage.value = 'Irregular enrollment approved.'
+    showNotifModal.value = true
+  } catch (e) {
+    irregularError.value = e?.message || 'Failed to submit irregular enrollment.'
+  } finally {
+    adminEnrollSaving.value = false
+  }
+}
+
+// Attempt to approve the created enrollment. If the response contains an ID, use it;
+// otherwise fetch the latest pending enrollment for the student and approve that.
+async function autoApproveIfPossible(studentObj, createResponse) {
+  try {
+    const id = createResponse?.enrollment_id || createResponse?.id || createResponse?.enrollment?.id
+    if (id) {
+      await approveEnrollmentById(id)
+      return
+    }
+    if (!studentObj) return
+    const target = await findLatestPendingEnrollment(studentObj)
+    if (target?.id) await approveEnrollmentById(target.id)
+  } catch (_) {
+    // Silently ignore; UI already notifies success, and manual approval view exists
+  }
+}
+
+async function approveEnrollmentById(enrollmentId) {
+  const token = sessionStorage.getItem('admin_token')
+  const res = await fetch(`http://localhost:5000/api/admin/enrollments/${encodeURIComponent(enrollmentId)}/approve`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data?.error) throw new Error(data?.error || `Failed (${res.status})`)
+}
+
+async function findLatestPendingEnrollment(studentObj) {
+  const token = sessionStorage.getItem('admin_token')
+  const sidStr = studentObj?.student_id // e.g., '2025-00001'
+  const sidPk = studentObj?.id // numeric PK
+  const tryUrls = []
+  if (sidPk) tryUrls.push(`http://localhost:5000/api/admin/enrollments?student_pk=${encodeURIComponent(sidPk)}&status=pending`)
+  if (sidStr) tryUrls.push(`http://localhost:5000/api/admin/enrollments?student_id=${encodeURIComponent(sidStr)}&status=pending`)
+  tryUrls.push('http://localhost:5000/api/admin/enrollments?status=pending') // fallback: fetch all and filter client-side
+
+  let arr = []
+  for (const url of tryUrls) {
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    const list = await res.json().catch(() => ([]))
+    if (!res.ok || (list && list.error)) continue
+    arr = Array.isArray(list) ? list : []
+    if (arr.length) break
+  }
+  // Narrow to this student if we fetched broad list
+  if (arr.length && (sidPk || sidStr)) {
+    arr = arr.filter(e => {
+      const ePk = e.student_pk || e.studentId || e.student_id_pk || e.student_primary_id
+      const eStr = e.student_id || e.studentNumber || e.student_no
+      return (sidPk && (String(ePk) === String(sidPk))) || (sidStr && String(eStr) === String(sidStr))
+    })
+  }
+  // Prefer most recent by created_at desc, fallback by id desc
+  arr.sort((a, b) => {
+    const at = new Date(a.created_at || a.createdAt || 0).getTime()
+    const bt = new Date(b.created_at || b.createdAt || 0).getTime()
+    if (at !== bt) return bt - at
+    return (b.id || 0) - (a.id || 0)
+  })
+  return arr[0] || null
 }
 
 function toShortRegionLabel(r) {
@@ -1006,7 +1722,16 @@ function fetchCourses() {
   })
     .then(res => res.json())
     .then(data => {
-      courses.value = data
+      courses.value = Array.isArray(data) ? data : []
+      const map = {}
+      courses.value.forEach(course => {
+        if (course && (course.id != null)) {
+          const entry = { name: course.name, code: course.code }
+          map[course.id] = entry
+          map[String(course.id)] = entry
+        }
+      })
+      coursesMap.value = map
     })
     .catch(() => {
       notifMessage.value = 'Failed to fetch courses.'
@@ -1370,6 +2095,102 @@ const selectedEnrollment = ref(null)
 const detailsLoading = ref(false)
 const coursesMap = ref({})
 
+// Processing enrollments state
+const showProcessingModal = ref(false)
+const processingLoading = ref(false)
+const processingError = ref('')
+const processingEnrollments = ref([])
+
+// Documents modal state
+const showDocsModal = ref(false)
+const docsSaving = ref(false)
+const docsError = ref('')
+const docsForm = ref({ psa: false, form138: false, good_moral: false, tor: false, notes: '' })
+const docsAfterSaveAction = ref(null) // e.g., 'accept'
+// Show TOR only for transferee admission type
+const showTor = computed(() => String(selectedEnrollment.value?.admission_type || '').toLowerCase() === 'transferee')
+watch(showTor, (visible) => {
+  if (!visible) {
+    docsForm.value.tor = false
+  }
+})
+
+function openDocumentsModal(enrollment, after = null) {
+  docsError.value = ''
+  docsAfterSaveAction.value = after
+  const enr = enrollment || selectedEnrollment.value
+  if (!enr) return
+  selectedEnrollment.value = enr
+  let docs = {}
+  try {
+    if (enr.documents) {
+      docs = typeof enr.documents === 'string' ? JSON.parse(enr.documents) : enr.documents
+    }
+  } catch (_) { docs = {} }
+  const isTransferee = String(enr.admission_type || '').toLowerCase() === 'transferee'
+  docsForm.value = {
+    psa: !!docs.psa,
+    form138: !!docs.form138,
+    good_moral: !!docs.good_moral,
+    tor: isTransferee ? !!docs.tor : false,
+    notes: docs.notes || ''
+  }
+  showDocsModal.value = true
+}
+
+function closeDocumentsModal() {
+  showDocsModal.value = false
+}
+
+function saveDocuments() {
+  if (!selectedEnrollment.value?.id) return
+  docsSaving.value = true
+  docsError.value = ''
+  fetch(`http://localhost:5000/api/admin/freshman-enrollments/${selectedEnrollment.value.id}/documents`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ documents: docsForm.value })
+  })
+    .then(async res => {
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || `Failed (${res.status})`)
+      }
+      return res.json()
+    })
+    .then(() => {
+      // update local copy
+      if (selectedEnrollment.value) {
+        selectedEnrollment.value.documents = { ...docsForm.value }
+      }
+      // also update lists if present
+      const upd = (list) => {
+        const i = Array.isArray(list) ? list.findIndex(x => x.id === selectedEnrollment.value.id) : -1
+        if (i !== -1) list[i].documents = { ...docsForm.value }
+      }
+      upd(processingEnrollments.value)
+      if (pendingEnrollments?.value) upd(pendingEnrollments.value)
+      docsSaving.value = false
+      showDocsModal.value = false
+      // Continue to after-action (e.g., accept)
+      if (docsAfterSaveAction.value === 'accept') {
+        acceptEnrollment(selectedEnrollment.value.id)
+      }
+    })
+    .catch(e => {
+      docsSaving.value = false
+      docsError.value = e?.message || 'Failed to save documents.'
+    })
+}
+
+function confirmAccept(enrollment) {
+  // Open documents modal first; admin can tick submitted docs. Missing docs are implicitly to follow-up.
+  openDocumentsModal(enrollment, 'accept')
+}
+
 function openPendingModal() {
   pendingError.value = ''
   showPendingModal.value = true
@@ -1378,6 +2199,16 @@ function openPendingModal() {
 
 function closePendingModal() {
   showPendingModal.value = false
+}
+
+function openProcessingModal() {
+  processingError.value = ''
+  showProcessingModal.value = true
+  fetchProcessingEnrollments()
+}
+
+function closeProcessingModal() {
+  showProcessingModal.value = false
 }
 
 function fetchPendingEnrollments() {
@@ -1402,6 +2233,31 @@ function fetchPendingEnrollments() {
     })
 }
 
+function fetchProcessingEnrollments() {
+  processingLoading.value = true
+  fetch('http://localhost:5000/api/admin/freshman-enrollments?status=processing', {
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(async res => {
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Route not found: implement processing status in backend')
+        const msg = (await res.json().catch(() => ({})))?.error || `Failed (${res.status})`
+        throw new Error(msg)
+      }
+      return res.json()
+    })
+    .then(data => {
+      processingError.value = ''
+      processingEnrollments.value = Array.isArray(data) ? data : []
+      processingLoading.value = false
+    })
+    .catch((e) => {
+      processingError.value = e?.message || 'Failed to fetch processing enrollments.'
+      processingEnrollments.value = []
+      processingLoading.value = false
+    })
+}
+
 function viewEnrollment(e) {
   if (!e || !e.id) return
   showDetailsModal.value = true
@@ -1422,6 +2278,34 @@ function viewEnrollment(e) {
     })
 }
 
+function processEnrollment(id) {
+  if (!id) return
+  if (!confirm('Move this enrollment to Processing?')) return
+  fetch(`http://localhost:5000/api/admin/freshman-enrollments/${id}/process`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+  })
+    .then(async res => {
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Route not found: add POST /:id/process in backend')
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || `Failed (${res.status})`)
+      }
+      return res.json()
+    })
+    .then(() => {
+      // Refresh lists and close details
+      fetchPendingEnrollments()
+      fetchProcessingEnrollments()
+      showDetailsModal.value = false
+      notifMessage.value = 'Enrollment marked as processing.'
+      showNotifModal.value = true
+    })
+    .catch((e) => {
+      pendingError.value = e?.message || 'Failed to mark as processing.'
+    })
+}
+
 function acceptEnrollment(id) {
   if (!id) return
   if (!confirm('Accept this enrollment?')) return
@@ -1429,14 +2313,18 @@ function acceptEnrollment(id) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
   })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) {
-        pendingError.value = data.error
-        return
+    .then(async res => {
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Route not found: ensure /:id/accept allows processing→accepted')
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || `Failed (${res.status})`)
       }
+      return res.json()
+    })
+    .then(data => {
       // Refresh pending and accepted lists and close details if open
       fetchPendingEnrollments()
+      fetchProcessingEnrollments()
       fetchStudents()
       showDetailsModal.value = false
       const code = data.student_code || data.student_id
@@ -1444,8 +2332,8 @@ function acceptEnrollment(id) {
       notifMessage.value = 'Enrollment accepted.'
       showNotifModal.value = true
     })
-    .catch(() => {
-      pendingError.value = 'Failed to accept enrollment.'
+    .catch((e) => {
+      pendingError.value = e?.message || 'Failed to accept enrollment.'
     })
 }
 
@@ -1578,7 +2466,9 @@ function loadCourses() {
       } else {
         const map = {}
         data.forEach(course => {
-          map[course.id] = { name: course.name, code: course.code }
+          const entry = { name: course.name, code: course.code }
+          map[course.id] = entry
+          map[String(course.id)] = entry
         })
         coursesMap.value = map
       }

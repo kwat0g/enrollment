@@ -85,7 +85,10 @@ async function fetchEnrollments() {
   loading.value = true
   error.value = ''
   try {
-    const token = sessionStorage.getItem('token')
+    const token = sessionStorage.getItem('admin_token')
+    if (!token) {
+      throw new Error('Not authenticated. Please sign in as admin.')
+    }
     const res = await fetch('http://localhost:5000/api/admin/enrollments', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -101,7 +104,8 @@ async function fetchEnrollments() {
 
 async function approveEnrollment(enrollment) {
   try {
-    const token = sessionStorage.getItem('token')
+    const token = sessionStorage.getItem('admin_token')
+    if (!token) throw new Error('Not authenticated. Please sign in as admin.')
     const res = await fetch(`http://localhost:5000/api/admin/enrollments/${enrollment.id}/approve`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -116,7 +120,8 @@ async function approveEnrollment(enrollment) {
 
 async function rejectEnrollment(enrollment) {
   try {
-    const token = sessionStorage.getItem('token')
+    const token = sessionStorage.getItem('admin_token')
+    if (!token) throw new Error('Not authenticated. Please sign in as admin.')
     const res = await fetch(`http://localhost:5000/api/admin/enrollments/${enrollment.id}/reject`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }

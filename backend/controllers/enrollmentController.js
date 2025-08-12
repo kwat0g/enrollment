@@ -47,6 +47,43 @@ const submitEnrollment = async (req, res) => {
   }
 };
 
+// --- Admin: Create/Update block enrollment for a specific student ---
+const adminCreateEnrollment = async (req, res) => {
+  const { section_id, school_year, semester } = req.body;
+  const targetStudentId = req.params.studentId;
+  if (!section_id || !school_year || !semester || !targetStudentId) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  try {
+    // Allow admin to pass either numeric id or string student_id
+    const studentNumericId = await resolveStudentIdStrict(targetStudentId);
+
+    // Check if already has enrollment this term
+    const [existing] = await db.query(
+      'SELECT * FROM enrollments WHERE student_id = ? AND school_year = ? AND semester = ? AND status IN (?, ?)',
+      [studentNumericId, school_year, semester, 'pending', 'approved']
+    );
+
+    if (existing.length) {
+      // Update existing to new section and reset to pending
+      await db.query(
+        `UPDATE enrollments SET section_id = ?, status = 'pending', enrollment_type = NULL, date_applied = NOW() WHERE student_id = ? AND school_year = ? AND semester = ?`,
+        [section_id, studentNumericId, school_year, semester]
+      );
+      return res.json({ success: true, updated: true });
+    }
+
+    // Create new enrollment
+    await db.query(
+      `INSERT INTO enrollments (student_id, section_id, school_year, semester, status, date_applied) VALUES (?, ?, ?, ?, 'pending', NOW())`,
+      [studentNumericId, section_id, school_year, semester]
+    );
+    res.json({ success: true, created: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
 // --- Admin: List pending enrollments ---
 const getPendingEnrollments = async (req, res) => {
   try {
@@ -247,6 +284,90 @@ const submitIrregularEnrollment = async (req, res) => {
   }
 };
 
+// --- Admin: Create/Update irregular enrollment for a specific student ---
+const adminCreateIrregularEnrollment = async (req, res) => {
+  const { subject_schedules, school_year, semester, enrollment_id } = req.body;
+  const targetStudentId = req.params.studentId;
+  if (!targetStudentId || !Array.isArray(subject_schedules) || subject_schedules.length === 0 || !school_year || !semester) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  try {
+    const studentNumericId = await resolveStudentIdStrict(targetStudentId);
+
+    // If updating an existing irregular enrollment
+    if (enrollment_id) {
+      await db.query('START TRANSACTION');
+      try {
+        // Ensure the enrollment belongs to the target student
+        const [enrRows] = await db.query('SELECT * FROM enrollments WHERE id = ? AND student_id = ?', [enrollment_id, studentNumericId]);
+        if (!enrRows.length) {
+          throw new Error('Enrollment not found for this student.');
+        }
+        await db.query('DELETE FROM irregular_enrollments WHERE enrollment_id = ?', [enrollment_id]);
+        for (const subjectSchedule of subject_schedules) {
+          const { subject_id, schedule_id, section_id } = subjectSchedule;
+          if (!subject_id || !schedule_id || !section_id) {
+            throw new Error('Invalid subject schedule data.');
+          }
+          await db.query(
+            `INSERT INTO irregular_enrollments (enrollment_id, subject_id, schedule_id, section_id)
+             VALUES (?, ?, ?, ?)`,
+            [enrollment_id, subject_id, schedule_id, section_id]
+          );
+        }
+        // Ensure enrollment_type is irregular and set pending
+        await db.query(
+          `UPDATE enrollments SET enrollment_type = 'irregular', status = 'pending', date_applied = NOW() WHERE id = ?`,
+          [enrollment_id]
+        );
+        await db.query('COMMIT');
+        return res.json({ success: true, enrollment_id });
+      } catch (transactionErr) {
+        await db.query('ROLLBACK');
+        throw transactionErr;
+      }
+    }
+
+    // Creating a new irregular enrollment
+    const [existing] = await db.query(
+      'SELECT * FROM enrollments WHERE student_id = ? AND school_year = ? AND semester = ? AND status IN (?, ?)',
+      [studentNumericId, school_year, semester, 'pending', 'approved']
+    );
+    if (existing.length) {
+      return res.status(400).json({ error: 'Student already has an enrollment for this term.' });
+    }
+
+    await db.query('START TRANSACTION');
+    try {
+      const primarySectionId = subject_schedules[0].section_id;
+      const [enrollmentResult] = await db.query(
+        `INSERT INTO enrollments (student_id, section_id, school_year, semester, status, date_applied, enrollment_type)
+         VALUES (?, ?, ?, ?, 'pending', NOW(), 'irregular')`,
+        [studentNumericId, primarySectionId, school_year, semester]
+      );
+      const newEnrollmentId = enrollmentResult.insertId;
+      for (const subjectSchedule of subject_schedules) {
+        const { subject_id, schedule_id, section_id } = subjectSchedule;
+        if (!subject_id || !schedule_id || !section_id) {
+          throw new Error('Invalid subject schedule data.');
+        }
+        await db.query(
+          `INSERT INTO irregular_enrollments (enrollment_id, subject_id, schedule_id, section_id)
+           VALUES (?, ?, ?, ?)`,
+          [newEnrollmentId, subject_id, schedule_id, section_id]
+        );
+      }
+      await db.query('COMMIT');
+      res.json({ success: true, enrollment_id: newEnrollmentId });
+    } catch (transactionErr) {
+      await db.query('ROLLBACK');
+      throw transactionErr;
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+};
+
 // --- Admin: Get irregular enrollment details ---
 const getIrregularEnrollmentDetails = async (req, res) => {
   try {
@@ -297,10 +418,12 @@ const getIrregularEnrollmentDetails = async (req, res) => {
 
 module.exports = {
   submitEnrollment,
+  adminCreateEnrollment,
   getPendingEnrollments,
   approveEnrollment,
   rejectEnrollment,
   getAllScheduledSubjects,
   submitIrregularEnrollment,
+  adminCreateIrregularEnrollment,
   getIrregularEnrollmentDetails
 };

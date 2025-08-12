@@ -1,6 +1,26 @@
 const { db } = require('../config/database');
 
-// Ensure status column exists and supports the 'accepted' value
+// Ensure documents column (JSON) exists for tracking submitted documents
+async function ensureDocumentsColumn() {
+  try {
+    const [rows] = await db.query(
+      `SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'freshman_enrollments' AND COLUMN_NAME = 'documents'`
+    );
+    if (!rows || rows.length === 0) {
+      // Prefer JSON; fall back to TEXT if JSON not supported by the MySQL flavor
+      try {
+        await db.query("ALTER TABLE freshman_enrollments ADD COLUMN documents JSON NULL");
+      } catch (e) {
+        await db.query("ALTER TABLE freshman_enrollments ADD COLUMN documents TEXT NULL");
+      }
+    }
+  } catch (e) {
+    console.warn('Warning ensuring documents column:', e.message || e);
+  }
+}
+
+// Ensure status column exists and supports the required enum values, including 'processing'
 async function ensureStatusColumn() {
   try {
     // Check if column exists
@@ -10,15 +30,20 @@ async function ensureStatusColumn() {
     );
     if (!rows || rows.length === 0) {
       await db.query(
-        "ALTER TABLE freshman_enrollments ADD COLUMN status ENUM('pending','approved','accepted','rejected') NOT NULL DEFAULT 'pending'"
+        "ALTER TABLE freshman_enrollments ADD COLUMN status ENUM('pending','processing','approved','accepted','rejected') NOT NULL DEFAULT 'pending'"
       );
       return;
     }
     // If exists but doesn't include 'accepted', modify ENUM to include it
     const colType = (rows[0].COLUMN_TYPE || '').toLowerCase();
-    if (!colType.includes("'accepted'") || !colType.includes("'approved'")) {
+    const needsProcessing = !colType.includes("'processing'");
+    const needsApproved = !colType.includes("'approved'");
+    const needsAccepted = !colType.includes("'accepted'");
+    const needsRejected = !colType.includes("'rejected'");
+    const needsPending = !colType.includes("'pending'");
+    if (needsProcessing || needsApproved || needsAccepted || needsRejected || needsPending) {
       await db.query(
-        "ALTER TABLE freshman_enrollments MODIFY COLUMN status ENUM('pending','approved','accepted','rejected') NOT NULL DEFAULT 'pending'"
+        "ALTER TABLE freshman_enrollments MODIFY COLUMN status ENUM('pending','processing','approved','accepted','rejected') NOT NULL DEFAULT 'pending'"
       );
     }
   } catch (e) {
@@ -35,6 +60,7 @@ async function ensureStatusColumn() {
 async function getAllFreshmanEnrollments(req, res) {
   try {
     await ensureStatusColumn();
+    await ensureDocumentsColumn();
     const status = String((req.query.status || 'accepted')).toLowerCase();
     const [rows] = await db.query(
       `SELECT id,
@@ -51,7 +77,8 @@ async function getAllFreshmanEnrollments(req, res) {
               year_level, admission_type,
               shs_name, shs_track, preferred_sched,
               consent,
-              status
+              status,
+              documents
          FROM freshman_enrollments
         WHERE status = ?`,
       [status]
@@ -69,6 +96,7 @@ async function getAllFreshmanEnrollments(req, res) {
 async function acceptFreshmanEnrollment(req, res) {
   try {
     await ensureStatusColumn();
+    await ensureDocumentsColumn();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
@@ -174,7 +202,33 @@ async function rejectFreshmanEnrollment(req, res) {
   }
 }
 
-module.exports = { getAllFreshmanEnrollments, acceptFreshmanEnrollment, rejectFreshmanEnrollment };
+/**
+ * POST /api/admin/freshman-enrollments/:id/process
+ * Transitions a freshman enrollment from pending -> processing
+ */
+async function processFreshmanEnrollment(req, res) {
+  try {
+    await ensureStatusColumn();
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    // Only allow transition from pending
+    const [rows] = await db.query(`SELECT status FROM freshman_enrollments WHERE id=?`, [id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Enrollment not found' });
+    const current = String(rows[0].status || '').toLowerCase();
+    if (current !== 'pending') return res.status(400).json({ error: 'Only pending enrollments can be moved to processing' });
+    const [result] = await db.query(
+      `UPDATE freshman_enrollments SET status='processing' WHERE id=?`,
+      [id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Enrollment not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('processFreshmanEnrollment error:', err);
+    res.status(500).json({ error: 'Failed to mark enrollment as processing' });
+  }
+}
+
+module.exports = { getAllFreshmanEnrollments, acceptFreshmanEnrollment, rejectFreshmanEnrollment, processFreshmanEnrollment };
 /**
  * GET /api/admin/freshman-enrollments/:id
  * Returns full record for a single enrollment id
@@ -182,6 +236,7 @@ module.exports = { getAllFreshmanEnrollments, acceptFreshmanEnrollment, rejectFr
 async function getFreshmanEnrollmentById(req, res) {
   try {
     await ensureStatusColumn();
+    await ensureDocumentsColumn();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
     const [rows] = await db.query(
@@ -201,6 +256,7 @@ async function getFreshmanEnrollmentById(req, res) {
               year_level, admission_type,
               consent,
               status,
+              documents,
               created_at, updated_at
          FROM freshman_enrollments
         WHERE id = ?
@@ -218,6 +274,32 @@ async function getFreshmanEnrollmentById(req, res) {
 module.exports.getFreshmanEnrollmentById = getFreshmanEnrollmentById;
 
 // GET /api/admin/freshman-enrollments/by-student/:student_id
+
+/**
+ * POST /api/admin/freshman-enrollments/:id/documents
+ * Body: { documents: { psa: boolean, form138?: boolean, good_moral?: boolean, tor?: boolean, notes?: string } }
+ */
+async function updateEnrollmentDocuments(req, res) {
+  try {
+    await ensureDocumentsColumn();
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    const docs = req.body && req.body.documents ? req.body.documents : {};
+    // Serialize to JSON string for compatibility even if column is JSON
+    const payload = JSON.stringify(docs || {});
+    const [result] = await db.query(
+      `UPDATE freshman_enrollments SET documents = ? WHERE id = ?`,
+      [payload, id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Enrollment not found' });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('updateEnrollmentDocuments error:', err);
+    return res.status(500).json({ error: 'Failed to update documents' });
+  }
+}
+
+module.exports.updateEnrollmentDocuments = updateEnrollmentDocuments;
 // Returns full record for a single student_id with status approved or accepted
 async function getFreshmanEnrollmentByStudentId(req, res) {
   try {

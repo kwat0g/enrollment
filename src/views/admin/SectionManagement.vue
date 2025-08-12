@@ -261,7 +261,8 @@ function hasScheduleChanges() {
     if ((current.day || '') !== (original.day || '') ||
         (current.start_time || '') !== (original.start_time || '') ||
         (current.end_time || '') !== (original.end_time || '') ||
-        (current.room || '') !== (original.room || '')) {
+        (current.room || '') !== (original.room || '') ||
+        ((current.instructor || '') !== (original.instructor || ''))) {
       return true
     }
   }
@@ -1328,6 +1329,10 @@ async function saveAssignedSchedules() {
     const token = sessionStorage.getItem('admin_token')
     // Debug log: what is being sent to the backend
     console.log('SENDING SCHEDULES:', JSON.stringify(pendingSchedules.value, null, 2));
+    // Determine current section context early for conflict checks
+    const sectionId = showEditModal.value ? editSection.value.id : subjectAssignSectionId.value
+    const currentSection = sections.value.find(s => s.id == sectionId)
+    const currentSectionName = currentSection?.name
     // Check for conflicts among pending schedules
     for (let i = 0; i < pendingSchedules.value.length; i++) {
       for (let j = i + 1; j < pendingSchedules.value.length; j++) {
@@ -1346,6 +1351,10 @@ async function saveAssignedSchedules() {
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
       for (const existing of data) {
+        // Ignore self-conflicts: when the existing record refers to the same section+subject
+        const sameSection = (existing.section_id == sectionId) || (existing.section_name && currentSectionName && existing.section_name === currentSectionName)
+        const sameSubject = (existing.subject_id == sched.subject_id) || (existing.subject_code && existing.subject_code === sched.code)
+        if (sameSection && sameSubject) continue
         if (timesOverlap(sched.start_time, sched.end_time, existing.start_time, existing.end_time)) {
           notifMessage.value = `Schedule conflict: ${sched.code} conflicts with ${existing.subject_code} (${existing.section_name || 'Unassigned'}) in room ${sched.room} on ${sched.day}`
           showNotifModal.value = true
@@ -1354,7 +1363,6 @@ async function saveAssignedSchedules() {
       }
     }
     // Send both subjectIds and schedules to backend
-    const sectionId = showEditModal.value ? editSection.value.id : subjectAssignSectionId.value
     if (!pendingSchedules.value.length) {
       notifMessage.value = 'No schedules to save.'
       showNotifModal.value = true

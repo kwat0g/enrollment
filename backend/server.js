@@ -90,8 +90,10 @@ app.post('/api/admin/enrollments/:id/reject', authAdmin, enrollmentController.re
 // === FRESHMAN ENROLLMENT (ADMIN) ===
 app.get('/api/admin/freshman-enrollments', authAdmin, adminFreshmanEnrollmentController.getAllFreshmanEnrollments);
 app.get('/api/admin/freshman-enrollments/:id', authAdmin, adminFreshmanEnrollmentController.getFreshmanEnrollmentById);
+app.post('/api/admin/freshman-enrollments/:id/process', authAdmin, adminFreshmanEnrollmentController.processFreshmanEnrollment);
 app.post('/api/admin/freshman-enrollments/:id/accept', authAdmin, adminFreshmanEnrollmentController.acceptFreshmanEnrollment);
 app.post('/api/admin/freshman-enrollments/:id/reject', authAdmin, adminFreshmanEnrollmentController.rejectFreshmanEnrollment);
+app.post('/api/admin/freshman-enrollments/:id/documents', authAdmin, adminFreshmanEnrollmentController.updateEnrollmentDocuments);
 app.post('/api/admin/freshman-enrollments', authAdmin, adminFreshmanEnrollmentController.submitAdminFreshmanEnrollment);
 // Fetch freshman enrollment by student_id (for Admin modal edit sync)
 app.get(
@@ -117,8 +119,14 @@ app.post('/api/public/freshman-enrollment', publicEnrollmentController.submitFre
 
 // === IRREGULAR ENROLLMENT ROUTES ===
 app.get('/api/student/subjects/all-scheduled', authStudent, enrollmentController.getAllScheduledSubjects);
+// Admin equivalent for irregular UI
+app.get('/api/admin/subjects/all-scheduled', authAdmin, enrollmentController.getAllScheduledSubjects);
 app.post('/api/student/enroll/irregular', authStudent, enrollmentController.submitIrregularEnrollment);
 app.get('/api/admin/enrollments/:id/irregular-details', authAdmin, enrollmentController.getIrregularEnrollmentDetails);
+
+// === ADMIN: Create enrollments on behalf of a student ===
+app.post('/api/admin/students/:studentId/enroll', authAdmin, enrollmentController.adminCreateEnrollment);
+app.post('/api/admin/students/:studentId/enroll/irregular', authAdmin, enrollmentController.adminCreateIrregularEnrollment);
 
 // === SECTION MANAGEMENT ROUTES ===
 app.get('/api/admin/sections', sectionController.getAllSections);
