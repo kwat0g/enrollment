@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 12, 2025 at 07:13 PM
+-- Generation Time: Aug 13, 2025 at 12:49 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -99,6 +99,14 @@ CREATE TABLE `enrollments` (
   `reference_number` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `enrollments`
+--
+
+INSERT INTO `enrollments` (`id`, `student_id`, `section_id`, `school_year`, `semester`, `status`, `enrollment_type`, `date_applied`, `reference_number`) VALUES
+(8, 1, 10, '2025-2026', '1st Semester', 'approved', 'irregular', '2025-08-13 02:07:36', 'ENR-20250813-8'),
+(9, 2, 8, '2025-2026', '1st Semester', 'approved', 'irregular', '2025-08-13 02:08:35', 'ENR-20250813-9');
+
 -- --------------------------------------------------------
 
 --
@@ -108,7 +116,7 @@ CREATE TABLE `enrollments` (
 CREATE TABLE `freshman_enrollments` (
   `id` int(11) NOT NULL,
   `student_id` varchar(11) DEFAULT NULL,
-  `course_id` int(11) NOT NULL,
+  `course_id` int(11) DEFAULT NULL,
   `first_name` varchar(100) NOT NULL,
   `middle_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) NOT NULL,
@@ -123,7 +131,7 @@ CREATE TABLE `freshman_enrollments` (
   `email` varchar(150) NOT NULL,
   `mobile` varchar(20) NOT NULL,
   `region_code` varchar(10) NOT NULL,
-  `province_code` varchar(10) NOT NULL,
+  `province_code` varchar(10) DEFAULT NULL,
   `city_code` varchar(10) NOT NULL,
   `barangay_code` varchar(15) NOT NULL,
   `region` varchar(150) DEFAULT NULL,
@@ -141,9 +149,9 @@ CREATE TABLE `freshman_enrollments` (
   `guardian_name` varchar(150) NOT NULL,
   `guardian_relation` varchar(100) NOT NULL,
   `guardian_contact` varchar(20) NOT NULL,
-  `shs_name` varchar(255) NOT NULL,
-  `shs_track` varchar(255) NOT NULL,
-  `preferred_sched` varchar(50) NOT NULL,
+  `shs_name` varchar(255) DEFAULT NULL,
+  `shs_track` varchar(255) DEFAULT NULL,
+  `preferred_sched` varchar(50) DEFAULT NULL,
   `year_level` varchar(20) NOT NULL,
   `admission_type` enum('Freshman','Transferee') NOT NULL,
   `consent` tinyint(1) NOT NULL DEFAULT 0,
@@ -159,7 +167,8 @@ CREATE TABLE `freshman_enrollments` (
 
 INSERT INTO `freshman_enrollments` (`id`, `student_id`, `course_id`, `first_name`, `middle_name`, `last_name`, `suffix`, `birthdate`, `sex`, `civil_status`, `nationality`, `citizenship`, `place_of_birth`, `religion`, `email`, `mobile`, `region_code`, `province_code`, `city_code`, `barangay_code`, `region`, `province`, `city`, `barangay`, `address_line`, `zip`, `father_name`, `father_occupation`, `father_contact`, `mother_name`, `mother_occupation`, `mother_contact`, `guardian_name`, `guardian_relation`, `guardian_contact`, `shs_name`, `shs_track`, `preferred_sched`, `year_level`, `admission_type`, `consent`, `created_at`, `updated_at`, `status`, `documents`) VALUES
 (1, '2025-00001', 1, 'Jarmaine', 'Pedwino', 'Diegas', '', '2004-01-10', 'Male', 'Single', 'Filipino', 'Filipino', 'Manila', 'Roman Catholic', 'diegas.jarmaine@gmail.com', '09123131231', '040000000', '042100000', '042103000', '042103034', 'CALABARZON', 'Cavite', 'City of Bacoor', 'Habay II', 'Habay', '4102', 'Tatay Diegas', 'Ewan', '09123131231', 'Nanay Diegas', 'Ewan', '09123131231', 'Ate Diegas', 'Sibling', '09123131231', 'Habay', 'TVL', 'Afternoon', '3rd', 'Transferee', 1, '2025-08-10 16:36:29', '2025-08-12 15:38:50', 'accepted', '{\"psa\":true,\"form138\":true,\"good_moral\":true,\"tor\":true,\"notes\":\"\"}'),
-(2, NULL, 1, 'Kurt', 'Otin', 'De Mesa', '', '2004-02-01', 'Male', 'Single', 'Chinese', 'Chinese', 'LANGIT', 'Roman Catholic', 'demesa@gmail.com', '09121232321', '040000000', '042100000', '042106000', '042106005', 'CALABARZON', 'Cavite', 'City of Dasmariñas', 'Langkaan I', 'langkantot', '4111', 'dsa', 'dsads', '09111111111', 'sdsd', 'sdsd', '09111111111', 'dsadas', 'Sibling', '09111111111', 'langkantot', 'TVL', 'Evening', '1st', 'Freshman', 1, '2025-08-12 07:45:30', '2025-08-12 17:10:02', 'pending', NULL);
+(2, '2025-00002', 1, 'Kurt', 'Otin', 'De Mesa', '', '2004-02-01', 'Male', 'Single', 'Chinese', 'Chinese', 'LANGIT', 'Roman Catholic', 'demesa@gmail.com', '09121232321', '040000000', '042100000', '042106000', '042106005', 'CALABARZON', 'Cavite', 'City of Dasmariñas', 'Langkaan I', 'langkantot', '4111', 'dsa', 'dsads', '09111111111', 'sdsd', 'sdsd', '09111111111', 'dsadas', 'Sibling', '09111111111', 'langkantot', 'TVL', 'Evening', '1st', 'Freshman', 1, '2025-08-12 07:45:30', '2025-08-12 17:22:35', 'accepted', '{\"psa\":true,\"form138\":false,\"good_moral\":false,\"tor\":false,\"notes\":\"\"}'),
+(21, NULL, 1, 'dsadasda', 'dsadasd', 'dsadasd', '', '2004-01-20', 'Male', 'Single', 'Filipino', 'Filipino', 'dsad', 'Roman Catholic', 'dsdsad@gmail.com', '09111111111', '010000000', '012800000', '012801000', '012801001', 'Ilocos Region', 'Ilocos Norte', 'Adams', 'Adams (Pob.)', 'asda', '1111', 'dsad', 'dasd', '09111111111', 'dasd', 'dsad', '09111111111', 'dasd', 'Grandparent', '09111111111', 'dsad', 'dsad', 'Morning', '1st', 'Freshman', 1, '2025-08-12 22:09:12', NULL, 'pending', NULL);
 
 -- --------------------------------------------------------
 
@@ -190,6 +199,16 @@ CREATE TABLE `irregular_enrollments` (
   `section_id` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `irregular_enrollments`
+--
+
+INSERT INTO `irregular_enrollments` (`id`, `enrollment_id`, `subject_id`, `schedule_id`, `section_id`, `created_at`) VALUES
+(1, 8, 16, 8, 10, '2025-08-12 18:07:36'),
+(2, 8, 16, 7, 10, '2025-08-12 18:07:36'),
+(3, 9, 10, 6, 8, '2025-08-12 18:08:35'),
+(4, 9, 10, 5, 8, '2025-08-12 18:08:35');
 
 -- --------------------------------------------------------
 
@@ -276,7 +295,9 @@ CREATE TABLE `schedules` (
 
 INSERT INTO `schedules` (`id`, `section_id`, `subject_id`, `room_id`, `day`, `start_time`, `end_time`, `type`, `instructor`) VALUES
 (5, 8, 9, 3, 'Monday', '14:00:00', '15:00:00', 'Lec', '1'),
-(6, 8, 10, 3, 'Tuesday', '14:00:00', '15:00:00', 'Lab', '2');
+(6, 8, 10, 3, 'Tuesday', '14:00:00', '15:00:00', 'Lab', '2'),
+(7, 10, 15, 3, 'Monday', '15:00:00', '16:00:00', 'Lec', 'N/A'),
+(8, 10, 16, 3, 'Tuesday', '15:00:00', '16:00:00', 'Lab', 'N/A');
 
 -- --------------------------------------------------------
 
@@ -302,7 +323,8 @@ INSERT INTO `sections` (`id`, `name`, `year_level`, `course_id`, `schedule_type`
 (8, 'BSIT-31A2', '3rd', 1, 'afternoon', 'open'),
 (9, 'BSIT-31M1', '3rd', 1, 'morning', 'closed'),
 (10, 'BSIT-11A2', '1st', 1, 'afternoon', 'closed'),
-(11, 'BSIT-21E1', '2nd', 1, 'evening', 'closed');
+(11, 'BSIT-21E1', '2nd', 1, 'evening', 'closed'),
+(12, 'BSIT-41M1', '4th', 1, 'morning', 'closed');
 
 -- --------------------------------------------------------
 
@@ -324,6 +346,15 @@ CREATE TABLE `students` (
   `year_level` varchar(10) DEFAULT NULL,
   `course_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `students`
+--
+
+INSERT INTO `students` (`id`, `student_id`, `last_name`, `first_name`, `middle_name`, `suffix`, `gender`, `address`, `contact_number`, `email`, `year_level`, `course_id`) VALUES
+(1, '2025-00002', 'De Mesa', 'Kurt', 'Otin', NULL, NULL, NULL, NULL, NULL, NULL, 1),
+(2, '2025-00001', 'Diegas', 'Jarmaine', 'Pedwino', NULL, NULL, NULL, NULL, NULL, NULL, 1),
+(3, '2025-00003', 'dsad', 'das', 'dsad', NULL, NULL, NULL, NULL, NULL, NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -490,13 +521,13 @@ ALTER TABLE `courses`
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `freshman_enrollments`
 --
 ALTER TABLE `freshman_enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- AUTO_INCREMENT for table `grades`
@@ -508,7 +539,7 @@ ALTER TABLE `grades`
 -- AUTO_INCREMENT for table `irregular_enrollments`
 --
 ALTER TABLE `irregular_enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -526,19 +557,19 @@ ALTER TABLE `rooms`
 -- AUTO_INCREMENT for table `schedules`
 --
 ALTER TABLE `schedules`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `sections`
 --
 ALTER TABLE `sections`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `students`
 --
 ALTER TABLE `students`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `subjects`
